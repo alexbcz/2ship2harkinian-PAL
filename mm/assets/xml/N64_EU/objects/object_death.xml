@@ -1,8 +1,8 @@
 ﻿<Root>
     <File Name="object_death" Segment="6">
         <Animation Name="gGomessScytheSwingAnim" Offset="0xE64" />
-        <Animation Name="object_death_Anim_0015B4" Offset="0x15B4" />   <!-- Start bats attack    -->
-        <Animation Name="object_death_Anim_001834" Offset="0x1834" />   <!-- Continue bats attack -->
+        <Animation Name="gGomessBatSwarmStartAnim" Offset="0x15B4" />   <!-- Start bats attack    -->
+        <Animation Name="gGomessBatSwarmAnim" Offset="0x1834" />   <!-- Continue bats attack -->
         <Animation Name="gGomessDamagedAnim" Offset="0x1F80" />
         <Animation Name="gGomessBeginDeathAnim" Offset="0x2DE8" />
         <Animation Name="gGomessDeathAnim" Offset="0x352C" />
@@ -10,8 +10,8 @@
         <DList Name="object_death_DL_006B80" Offset="0x6B80" />
         <DList Name="object_death_DL_006D18" Offset="0x6D18" />
         <DList Name="object_death_DL_006E08" Offset="0x6E08" />
-        <DList Name="object_death_DL_006F88" Offset="0x6F88" /> <!-- Original name is "d13_kama_model" ("sickle​") -->
-        <DList Name="object_death_DL_0073D0" Offset="0x73D0" /> <!-- Original name is "d13_kamahaA_model" -->
+        <DList Name="gGomessScytheHandleDL" Offset="0x6F88" /> <!-- Original name is "d13_kama_model" ("sickle​") -->
+        <DList Name="gGomessScytheBladeDL" Offset="0x73D0" /> <!-- Original name is "d13_kamahaA_model" -->
         <DList Name="object_death_DL_0074B8" Offset="0x74B8" />
         <DList Name="object_death_DL_007560" Offset="0x7560" />
         <DList Name="object_death_DL_007638" Offset="0x7638" />

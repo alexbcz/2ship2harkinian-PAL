@@ -1,8 +1,8 @@
 ﻿<Root>
     <File Name="object_kitan" Segment="6">
-        <Animation Name="object_kitan_Anim_000CE8" Offset="0xCE8" /> <!-- Original name is "kt_hohoho" -->
-        <Animation Name="object_kitan_Anim_00190C" Offset="0x190C" /> <!-- Original name is "kt_laugh" -->
-        <Animation Name="object_kitan_Anim_002770" Offset="0x2770" /> <!-- Original name is "kt_wait" -->
+        <Animation Name="gKeatonChuckleAnim" Offset="0xCE8" /> <!-- Original name is "kt_hohoho" -->
+        <Animation Name="gKeatonCelebrateAnim" Offset="0x190C" /> <!-- Original name is "kt_laugh" -->
+        <Animation Name="gKeatonIdleAnim" Offset="0x2770" /> <!-- Original name is "kt_wait" -->
         <DList Name="object_kitan_DL_004C40" Offset="0x4C40" />
         <DList Name="object_kitan_DL_004DF0" Offset="0x4DF0" />
         <DList Name="object_kitan_DL_005160" Offset="0x5160" />
@@ -49,6 +49,6 @@
         <Limb Name="object_kitan_Standardlimb_007F34" Type="Standard" EnumName="OBJECT_KITAN_LIMB_12" Offset="0x7F34" />
         <Limb Name="object_kitan_Standardlimb_007F40" Type="Standard" EnumName="OBJECT_KITAN_LIMB_13" Offset="0x7F40" />
         <Limb Name="object_kitan_Standardlimb_007F4C" Type="Standard" EnumName="OBJECT_KITAN_LIMB_14" Offset="0x7F4C" />
-        <Skeleton Name="object_kitan_Skel_007FA8" Type="Flex" LimbType="Standard" LimbNone="OBJECT_KITAN_LIMB_NONE" LimbMax="OBJECT_KITAN_LIMB_MAX" EnumName="ObjectKitanLimb" Offset="0x7FA8" />
+        <Skeleton Name="gKeatonSkel" Type="Flex" LimbType="Standard" LimbNone="KEATON_LIMB_NONE" LimbMax="KEATON_LIMB_MAX" EnumName="KeatonLimb" Offset="0x7FA8" />
     </File>
 </Root>

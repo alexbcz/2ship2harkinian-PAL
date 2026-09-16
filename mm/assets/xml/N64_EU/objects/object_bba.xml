@@ -18,10 +18,10 @@
         <DList Name="gBbaFeetDL" Offset="0x4180" />
 
         <!-- Animations -->
-        <Animation Name="gBbaSwayAnim" Offset="0x4910" /> <!-- Original name is "sb_ending" -->
-        <Animation Name="gBbaKnockedOverAnim" Offset="0x5154" /> <!-- Original name is "sb_taore" ("to fall (over, down); to collapse; to take a fall") -->
-        <Animation Name="gBbaLyingDownAnim" Offset="0x58B8" /> <!-- Original name is "sb_taorewait" -->
-        <Animation Name="gBbaIdleHoldingBagAnim" Offset="0x5DC4" /> <!-- Original name is "sb_wait01" -->
+        <Animation Name="gBombShopLadySwayAnim" Offset="0x4910" /> <!-- Original name is "sb_ending" -->
+        <Animation Name="gBombShopLadyKnockedOverAnim" Offset="0x5154" /> <!-- Original name is "sb_taore" ("to fall (over, down); to collapse; to take a fall") -->
+        <Animation Name="gBombShopLadyLyingDownAnim" Offset="0x58B8" /> <!-- Original name is "sb_taorewait" -->
+        <Animation Name="gBombShopLadyIdleHoldingBagAnim" Offset="0x5DC4" /> <!-- Original name is "sb_wait01" -->
 
         <!-- Skeleton -->
         <Limb Name="gBbaUpperLegsLimb" Type="Standard" EnumName="BBA_LIMB_UPPER_LEGS" Offset="0x5DE0" />
@@ -41,11 +41,11 @@
         <Limb Name="gBbaRightLowerArmRootLimb" Type="Standard" EnumName="BBA_LIMB_RIGHT_LOWER_ARM_ROOT" Offset="0x5E88" />
         <Limb Name="gBbaRightForearmLimb" Type="Standard" EnumName="BBA_LIMB_RIGHT_FOREARM" Offset="0x5E94" />
         <Limb Name="gBbaRightHandLimb" Type="Standard" EnumName="BBA_LIMB_RIGHT_HAND" Offset="0x5EA0" />
-        <Skeleton Name="gBbaSkel" Type="Flex" LimbType="Standard" LimbNone="BBA_LIMB_NONE" LimbMax="BBA_LIMB_MAX" EnumName="BbaLimb" Offset="0x5EF0" />
+        <Skeleton Name="gBombShopLadySkel" Type="Flex" LimbType="Standard" LimbNone="BOMB_SHOP_LADY_LIMB_NONE" LimbMax="BOMB_SHOP_LADY_LIMB_MAX" EnumName="BombShopLadyLimb" Offset="0x5EF0" />
 
          <!-- Animations -->
-        <Animation Name="gBbaIdleAnim" Offset="0x6550" /> <!-- Original name is "sb_wait02" -->
-        <Animation Name="gBbaWalkingHoldingBagAnim" Offset="0x6B10" /> <!-- Original name is "sb_walk01" -->
+        <Animation Name="gBombShopLadyIdleAnim" Offset="0x6550" /> <!-- Original name is "sb_wait02" -->
+        <Animation Name="gBombShopLadyWalkingHoldingBagAnim" Offset="0x6B10" /> <!-- Original name is "sb_walk01" -->
 
         <!-- TLUT -->
         <Texture Name="gBbaTLUT" OutName="bba_tlut" Format="rgba16" Width="16" Height="16" Offset="0x6B20" />
@@ -74,7 +74,7 @@
         <Texture Name="gBbaFingersTex" OutName="bba_fingers" Format="ci8" Width="16" Height="16" Offset="0x8FA0" />
         <Texture Name="gBbaBagTex" OutName="bba_bag" Format="ci8" Width="16" Height="16" Offset="0x90A0" />
         <Texture Name="gBbaSkirtTex" OutName="bba_skirt" Format="ci8" Width="16" Height="16" Offset="0x91A0" />
-        <Texture Name="gBbaEyeTex" OutName="bba_eye" Format="rgba16" Width="32" Height="32" Offset="0x92A0" />
+        <Texture Name="gBombShopLadyEyeTex" OutName="bomb_shop_lady_eye" Format="rgba16" Width="32" Height="32" Offset="0x92A0" />
         <Texture Name="gBbaCheekTex" OutName="bba_cheek" Format="ci8" Width="16" Height="16" Offset="0x9AA0" />
         <Texture Name="gBbaForeheadTex" OutName="bba_forehead" Format="ci8" Width="32" Height="32" Offset="0x9BA0" />
         <Texture Name="gBbaShirtTex" OutName="bba_shirt" Format="ci8" Width="16" Height="16" Offset="0x9FA0" />
