@@ -66,6 +66,7 @@ CrowdControl* CrowdControl::Instance;
 #include "2s2h/CustomItem/CustomItem.h"
 #include "2s2h/BenGui/Notification.h"
 #include "2s2h/ShipUtils.h"
+#include "2s2h/PalAssetLocalization.h"
 #include "2s2h/ShipInit.hpp"
 #include "2s2h/PresetManager/PresetManager.h"
 #include "2s2h/config/ConfigUpdaters.h"
@@ -741,7 +742,12 @@ void OTRGlobals::Initialize() {
     // gRandomizer = std::make_shared<Randomizer>();
 
     auto versions = context->GetResourceManager()->GetArchiveManager()->GetGameVersions();
+    bool isPalEu = false;
     for (uint32_t version : versions) {
+        if (version == MM_PAL_11) {
+            isPalEu = true;
+        }
+
         if (!validHashes.contains(version)) {
 #if defined(__SWITCH__)
             SPDLOG_ERROR("Invalid O2R File!");
@@ -754,6 +760,14 @@ void OTRGlobals::Initialize() {
 #endif
             exit(1);
         }
+    }
+
+    // PAL/EU stores many UI resources in per-language files. Resolve the
+    // English/base path to the selected PAL language before cache/archive lookup.
+    if (isPalEu) {
+        context->GetResourceManager()->SetResourcePathResolver([](const std::string& path) {
+            return PalAssetLocalization::Resolve(path, gSaveContext.options.language);
+        });
     }
 }
 
