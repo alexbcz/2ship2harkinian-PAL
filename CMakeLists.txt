@@ -215,12 +215,12 @@ set_property(TARGET 2ship PROPERTY APPIMAGE_ICON_FILE "${CMAKE_BINARY_DIR}/2s2hI
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
 install(FILES "${CMAKE_BINARY_DIR}/mm/2ship.o2r" DESTINATION . COMPONENT ship)
 install(TARGETS ZAPD DESTINATION ./assets/extractor COMPONENT extractor)
-install(DIRECTORY "${CMAKE_SOURCE_DIR}/mm/assets/extractor/" DESTINATION ./assets/ COMPONENT extractor)
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/mm/assets/extractor/" DESTINATION ./assets/extractor COMPONENT extractor)
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/mm/assets/xml/" DESTINATION ./assets/xml COMPONENT extractor)
 endif()
 
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Windows")
-install(DIRECTORY "${CMAKE_SOURCE_DIR}/mm/assets/extractor/" DESTINATION ./assets/ COMPONENT 2s2h)
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/mm/assets/extractor/" DESTINATION ./assets/extractor COMPONENT 2s2h)
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/mm/assets/xml/" DESTINATION ./assets/xml COMPONENT 2s2h)
 endif()
 
@@ -296,7 +296,7 @@ install(TARGETS ZAPD DESTINATION ${CMAKE_BINARY_DIR}/assets/extractor)
 
 set(PROGRAM_PERMISSIONS_EXECUTE OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ WORLD_EXECUTE WORLD_READ)
 
-install(DIRECTORY "${CMAKE_SOURCE_DIR}/mm/assets/extractor/" DESTINATION ./assets/)
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/mm/assets/extractor/" DESTINATION ./assets/extractor)
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/mm/assets/xml/" DESTINATION ./assets/xml)
 
 # Rename the installed soh binary to drop the macos suffix
