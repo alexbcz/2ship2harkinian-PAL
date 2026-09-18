@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <chrono>
+#include <cstdlib>
 
 #include <ship/resource/ResourceManager.h>
 #include <fast/Fast3dWindow.h>
@@ -342,7 +343,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     }
 
     std::shared_ptr<BS::thread_pool> threadPool = std::make_shared<BS::thread_pool>(1);
-    std::optional<std::future<void>> extractionTask;
+    std::optional<std::future<bool>> extractionTask;
 
 #if not defined(__SWITCH__) && not defined(__WIIU__)
     CheckAndCreateModFolder();
@@ -476,10 +477,11 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                 args.erase(args.begin());
                 extract = Extractor();
                 if (extract.RunFileStandalone(file)) {
-                    extractionTask = threadPool->submit_task([&]() -> void {
-                        extract.CallZapd(installPath, Ship::Context::GetAppDirectoryPath(appShortName), &extractCount,
-                                         &totalExtract);
+                    extractionTask = threadPool->submit_task([&]() -> bool {
+                        bool success = extract.CallZapd(installPath, Ship::Context::GetAppDirectoryPath(appShortName),
+                                                        &extractCount, &totalExtract);
                         extractCount = totalExtract = 0;
+                        return success;
                     });
                 } else {
                     bool open = true;
@@ -528,12 +530,12 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                             promptStep = PS_FILE_CHECK;
                             continue;
                         }
-                        extractionTask = threadPool->submit_task([&]() -> void {
-                            extract.CallZapd(installPath, Ship::Context::GetAppDirectoryPath(appShortName),
-                                             &extractCount, &totalExtract);
-                            extractStep = ES_VERIFY;
+                        extractionTask = threadPool->submit_task([&]() -> bool {
+                            bool success = extract.CallZapd(installPath, Ship::Context::GetAppDirectoryPath(appShortName),
+                                                            &extractCount, &totalExtract);
                             extractCount = 0;
                             totalExtract = 0;
+                            return success;
                         });
                         continue;
                     }
@@ -547,6 +549,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                     BenGui::RegisterPopup("No ROM Archives",
                                           "No ROM O2R files detected. Please generate a ROM O2R and relaunch.", "OK",
                                           "", [&]() { exit(0); });
+                    continue;
                 }
                 extractDone = true;
                 continue;
@@ -577,9 +580,32 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
             auto status = extractionTask->wait_for(std::chrono::milliseconds(0));
             if (status == std::future_status::ready) {
                 try {
-                    extractionTask->get();
+                    bool success = extractionTask->get();
+                    if (success && extractStep == ES_EXTRACT) {
+                        extractStep = ES_VERIFY;
+                    } else if (!success) {
+                        std::string error = extract.GetLastError();
+                        if (error.empty()) {
+                            error = "ROM extraction failed.";
+                        }
+                        if (extractStep == ES_EXTRACT_ARGS) {
+                            BenGui::RegisterPopup("Extractor Failed", error, "OK", "", []() { std::_Exit(1); });
+                        } else {
+                            BenGui::RegisterPopup("Extractor Failed", error);
+                            if (extractStep == ES_EXTRACT) {
+                                promptStep = PS_FILE_CHECK;
+                            }
+                        }
+                    }
                 } catch (const std::exception& e) {
-                    BenGui::RegisterPopup("Extraction Crashed", e.what(), "Close", "", []() { exit(1); });
+                    if (extractStep == ES_EXTRACT_ARGS) {
+                        BenGui::RegisterPopup("Extraction Crashed", e.what(), "OK", "", []() { std::_Exit(1); });
+                    } else {
+                        BenGui::RegisterPopup("Extraction Crashed", e.what());
+                        if (extractStep == ES_EXTRACT) {
+                            promptStep = PS_FILE_CHECK;
+                        }
+                    }
                 }
                 extractionTask.reset();
             } else {
