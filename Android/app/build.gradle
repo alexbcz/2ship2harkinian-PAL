@@ -3,8 +3,8 @@ def buildAsApplication = !buildAsLibrary
 def repoRoot = rootProject.projectDir.parentFile
 def androidVcpkgRoot = System.getenv("VCPKG_ROOT") ?: new File(repoRoot, "build/vcpkg").absolutePath
 def androidVcpkgRootArg = androidVcpkgRoot.replace('\\', '/')
-def androidAppVersionCode = 5001020
-def androidAppVersionName = "5.0.1-android.2"
+def androidAppVersionCode = 5001021
+def androidAppVersionName = "5.0.1-android.2-pal11-test1"
 if (buildAsApplication) {
     apply plugin: 'com.android.application'
 }
@@ -20,7 +20,7 @@ android {
     compileSdkVersion 33
     defaultConfig {
         if (buildAsApplication) {
-            applicationId project.findProperty('twoShipApplicationId') ?: "com.twoshipfork.mm"
+            applicationId project.findProperty('twoShipApplicationId') ?: "com.alexbcz.twoship.pal11"
             namespace("com.twoshipfork.mm")
         }
         minSdkVersion 24
