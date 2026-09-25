@@ -1,43 +1,86 @@
-# 2 Ship 2 Harkinian Android
+# 2 Ship 2 Harkinian
 
-Android port of 2 Ship 2 Harkinian, based on the HarbourMasters project and forked from Waterdish's original Android port.
+Unofficial fork of 2 Ship 2 Harkinian adding support for the European / PAL 1.1 release of The Legend of Zelda: Majora's Mask.
+
+This fork supports the PAL 1.1 ROM on Android, Windows, and Linux, including English, French, German, and Spanish.
 
 Original repository: https://github.com/HarbourMasters/2ship2harkinian
 
-Original port: https://github.com/Waterdish/2ship2harkinian-Android
+Original Android port: https://github.com/Waterdish/2ship2harkinian-Android
 
-Current Android release: **v5.0.1-android.2**
+Android fork used as the base for this port: https://github.com/linkzenic/2ship2harkinian-Android
 
-Supported: Android 7+ with OpenGL ES 3.0+
+## Supported Platforms
 
-Tested on: Android 13
+- Android ARM64
+- Windows x64
+- Linux x86_64
+
+## Supported ROM
+
+Majora's Mask European / PAL 1.1.
+
+Supported languages:
+
+- English
+- French
+- German
+- Spanish
 
 ## Installation
 
-1. Install the APK from the releases page: https://github.com/linkzenic/2ship2harkinian-Android/releases
-2. Open the app once so it can create the data folder and copy bundled support files.
-3. When prompted, select your legally obtained `MM.z64` ROM so the app can generate `mm.o2r`.
+Download the appropriate build from:
+
+https://github.com/alexbcz/2ship2harkinian-PAL/releases
+
+### Android
+
+1. Install the APK.
+2. Open the app.
+3. When prompted, select your PAL 1.1 Majora's Mask ROM so the app can generate `mm.o2r`.
 4. Subsequent launches should start directly into the game.
 
-Use the Back, Select, or minus controller button, or the Android back gesture/button, to open the 2 Ship 2 Harkinian menu. Use touch controls or a controller to navigate menus.
+Android 7+ with OpenGL ES 3.0+ is required.
+
+Use the Back, Select, or minus controller button, or the Android back gesture/button, to open the 2 Ship 2 Harkinian menu.
+
+### Windows
+
+Extract the Windows archive and launch `2ship.exe`.
+
+Keep `2ship.o2r` in the same directory as the executable.
+
+On first launch, select your PAL 1.1 Majora's Mask ROM when prompted.
+
+### Linux
+
+Extract the Linux archive and launch `2s2h.elf`.
+
+Keep `2ship.o2r` in the same directory as the executable.
+
+On first launch, select your PAL 1.1 Majora's Mask ROM when prompted.
 
 ## Data Folder
 
-The app stores user data in the selected 2S2H data folder. You can view the current folder and change it from Settings > General.
+On Android, the app stores user data in the selected 2S2H data folder. You can view the current folder and change it from Settings > General.
 
 Mods and user preset files should be placed in the relevant folders inside the selected data folder.
 
 ## FAQs
 
 **What is different with this fork?**
-Special attention to Android specific needs.
- - Move the data folder to an SD card
- - Turn touch controls on or off
- - Scalable menu sizes
+
+This fork adds support for the Majora's Mask European / PAL 1.1 ROM on Android, Windows, and Linux.
+
+The Android version also includes:
+
+- Move the data folder to an SD card
+- Turn touch controls on or off
+- Scalable menu sizes
 
 **Why is it immediately crashing?**
 
-Try deleting and regenerating `mm.o2r` from your own ROM.
+Try deleting and regenerating `mm.o2r` from your ROM.
 
 **My controller is not doing anything.**
 
