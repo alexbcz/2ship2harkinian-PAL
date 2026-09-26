@@ -16,11 +16,16 @@ Android fork used as the base for this port: https://github.com/linkzenic/2ship2
 - Windows x64
 - Linux x86_64
 
-## Supported ROM
+## Supported ROMs
 
-Majora's Mask European / PAL 1.1.
+This fork supports the Majora's Mask ROMs already supported by the upstream project, and adds support for the European / PAL 1.1 ROM.
 
-Supported languages:
+- Majora's Mask US / NTSC-U
+- Majora's Mask European / PAL 1.1
+
+### PAL languages
+
+The European / PAL 1.1 ROM supports:
 
 - English
 - French
