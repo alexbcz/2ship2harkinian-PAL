@@ -1,10 +1,22 @@
 name: generate-builds
 on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Platform to build"
+        required: true
+        default: macos
+        type: choice
+        options:
+          - macos
+          - all
+
   push:
     branches-ignore:
       - android
     tags-ignore:
       - "v*-android.*"
+
   pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -79,6 +91,7 @@ jobs:
         retention-days: 3
 
   build-macos:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'macos' || inputs.target == 'all' }}
     needs: generate-2ship-otr
     runs-on: macos-14
     steps:
@@ -121,6 +134,7 @@ jobs:
           readme.txt
 
   build-linux:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' }}  
     needs: generate-2ship-otr
     runs-on: ubuntu-22.04
     steps:
@@ -223,6 +237,7 @@ jobs:
         path: deps
 
   build-windows:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' }}  
     needs: generate-2ship-otr
     runs-on: windows-latest
     steps:
