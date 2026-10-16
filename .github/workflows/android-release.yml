@@ -14,6 +14,7 @@ on:
   push:
     branches:
       - android
+      - build-android
     paths:
       - "Android/**"
       - "CMake/**"
@@ -98,7 +99,7 @@ jobs:
 
       - name: Install Android build tools
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.0.10792818" "cmake;3.30.3"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.0.10792818" "cmake;3.30.3"
 
       - name: Install Android vcpkg dependencies
         env:
@@ -114,6 +115,7 @@ jobs:
           "$VCPKG_ROOT/vcpkg" install --triplet arm64-android zlib libpng libogg libvorbis opus opusfile
 
       - name: Prepare release signing key
+        if: github.ref_name != 'build-android'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -134,20 +136,21 @@ jobs:
         working-directory: Android
         env:
           VCPKG_ROOT: ${{ github.workspace }}/build/vcpkg
-          ANDROID_KEYSTORE_PATH: release-keystore.jks
+          ANDROID_KEYSTORE_PATH: ${{ github.ref_name != 'build-android' && 'release-keystore.jks' || '' }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           app_id_args=()
-          if [[ '${{ github.event_name }}' == 'workflow_dispatch' && '${{ inputs.install_target }}' == 'test' ]]; then
+          if [[ '${{ github.ref_name }}' == 'build-android' ]] || \
+             [[ '${{ github.event_name }}' == 'workflow_dispatch' && '${{ inputs.install_target }}' == 'test' ]]; then
             app_id_args+=('-PtwoShipApplicationId=com.twoshipfork.mm.touchcontroltest')
           fi
           ./gradlew :app:assembleRelease "${app_id_args[@]}"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: 2Ship-Android-${{ github.event_name == 'workflow_dispatch' && inputs.install_target || 'production' }}
+          name: 2Ship-Android-${{ github.ref_name == 'build-android' && 'test' || (github.event_name == 'workflow_dispatch' && inputs.install_target || 'production') }}
           path: Android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
