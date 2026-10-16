@@ -73,6 +73,7 @@
         android:hardwareAccelerated="true"
         android:appCategory="game" >
 
+        <profileable android:shell="true" />
 
         <!-- Example of setting SDL hints from AndroidManifest.xml:
         <meta-data android:name="SDL_ENV.SDL_ACCELEROMETER_AS_JOYSTICK" android:value="0"/>
