@@ -198,6 +198,14 @@ jobs:
       with:
         name: 2ship.o2r
         path: build-cmake/mm
+    - name: Download static AppImage runtime
+      run: |
+        set -euo pipefail
+        mkdir -p build/appimage
+        curl -fL --retry 3 https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64 \
+          -o build/appimage/runtime-x86_64
+        echo "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d  build/appimage/runtime-x86_64" \
+          | sha256sum -c -
     - name: Build 2Ship
       run: |
         export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
@@ -210,6 +218,7 @@ jobs:
       env:
         CC: gcc-12
         CXX: g++-12
+        LDAI_RUNTIME_FILE: ${{ github.workspace }}/build/appimage/runtime-x86_64
     - name: Upload build
       uses: actions/upload-artifact@v7
       with:
