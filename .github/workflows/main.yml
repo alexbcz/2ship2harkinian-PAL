@@ -1,11 +1,13 @@
 name: generate-builds
+
 on:
   push:
-    branches-ignore:
-      - android
+    branches:
+      - '**'
     tags-ignore:
       - "v*-android.*"
   pull_request:
+  workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -285,3 +287,12 @@ jobs:
       with:
         key: ${{ steps.restore-cache-vcpkg.outputs.cache-primary-key }}
         path: vcpkg
+
+  build-android:
+    name: Android
+    needs: generate-2ship-otr
+    uses: ./.github/workflows/android-release.yml
+    with:
+      # Only PAL release tags generate a production APK. Others get test APKs.
+      install_target: ${{ startsWith(github.ref, 'refs/tags/pal11-v') && 'production' || 'test' }}
+    secrets: inherit
