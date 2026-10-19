@@ -13,6 +13,8 @@ class BenMenu : public Ship::Menu {
   public:
     BenMenu(const std::string& consoleVariable, const std::string& name);
 
+    void SetVisibility(bool visible) override;
+
     void InitElement() override;
     void DrawElement() override;
     void UpdateElement() override;

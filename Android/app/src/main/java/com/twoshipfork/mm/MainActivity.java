@@ -1159,10 +1159,14 @@ public class MainActivity extends SDLActivity{
         }
 
         boolean touchControlsDisabled = preferences.getBoolean(PREF_TOUCH_CONTROLS_DISABLED, false);
-        overlayView.setVisibility(touchControlsDisabled ? View.GONE : View.VISIBLE);
+        boolean controlsHidden = preferences.getBoolean(PREF_TOUCH_CONTROLS_HIDDEN, false);
+        boolean menuOpen = !TouchAreaEnabled;
+
+        // Hide the entire touch overlay while any game menu is visible.
+        // Do not change the user's saved controller preferences.
+        overlayView.setVisibility(touchControlsDisabled || menuOpen ? View.GONE : View.VISIBLE);
 
         if (buttonGroup != null) {
-            boolean controlsHidden = preferences.getBoolean(PREF_TOUCH_CONTROLS_HIDDEN, false);
             buttonGroup.setVisibility(controlsHidden ? View.INVISIBLE : View.VISIBLE);
         }
     }
@@ -1225,13 +1229,16 @@ public class MainActivity extends SDLActivity{
         });
     }
 
-    boolean TouchAreaEnabled = true;
+    private volatile boolean TouchAreaEnabled = true;
 
-    void DisableTouchArea(){
+    void DisableTouchArea() {
         TouchAreaEnabled = false;
+        runOnUiThread(this::applyTouchControlsVisibility);
     }
-    void EnableTouchArea(){
+
+    void EnableTouchArea() {
         TouchAreaEnabled = true;
+        runOnUiThread(this::applyTouchControlsVisibility);
     }
 
     private void setupFloatingJoystick(FrameLayout touchArea) {

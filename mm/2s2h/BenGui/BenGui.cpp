@@ -30,6 +30,10 @@
 #include "Enhancements/Trackers/TimeSplits/TimesplitsSettings.h"
 #include "BenMenu.h"
 #include "BenMenuBar.h"
+
+#ifdef __ANDROID__
+#include <ship/port/mobile/MobileImpl.h>
+#endif
 #include "DeveloperTools/HookDebugger.h"
 #include "DeveloperTools/SaveEditor.h"
 #include "DeveloperTools/ActorViewer.h"
@@ -39,6 +43,21 @@
 #include "DeveloperTools/MessageViewer.h"
 
 namespace BenGui {
+
+void BenMenu::SetVisibility(bool visible) {
+    Ship::Menu::SetVisibility(visible);
+
+#ifdef __ANDROID__
+    // Unlike the toggle-key handler, this also runs for the ImGui close button.
+    auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
+    if (gui->GetMenuOrMenubarVisible()) {
+        Ship::Mobile::DisableTouchArea();
+    } else {
+        Ship::Mobile::EnableTouchArea();
+    }
+#endif
+}
+
 // MARK: - Delegates
 
 std::shared_ptr<BenMenuBar> mBenMenuBar;
