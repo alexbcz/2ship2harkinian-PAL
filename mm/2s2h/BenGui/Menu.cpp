@@ -70,6 +70,60 @@ uint32_t GetVectorIndexOf(std::vector<std::string>& vector, std::string value) {
     return std::distance(vector.begin(), std::find(vector.begin(), vector.end(), value));
 }
 
+#if defined(__ANDROID__)
+// Android touch events reach ImGui as mouse events. Convert a vertical finger
+// drag into scrolling of the child window where the gesture began.
+static constexpr float kAndroidMenuDragThreshold = 18.0f;
+
+static void AndroidMenuScrollChild(bool isSidebar) {
+    ImGuiIO& io = ImGui::GetIO();
+    constexpr int button = ImGuiMouseButton_Left;
+    if (!io.MouseDown[button] ||
+        !ImGui::IsMouseDragging(button, kAndroidMenuDragThreshold) ||
+        ImGui::GetScrollMaxY() <= 0.0f) {
+        return;
+    }
+
+    const ImVec2 start = io.MouseClickedPos[button];
+    const ImVec2 position = ImGui::GetWindowPos();
+    const ImVec2 size = ImGui::GetWindowSize();
+    if (start.x < position.x || start.x >= position.x + size.x ||
+        start.y < position.y || start.y >= position.y + size.y) {
+        return;
+    }
+    // Let the existing ImGui scrollbar remain directly draggable.
+    if (start.x >= position.x + size.x - ImGui::GetStyle().ScrollbarSize) {
+        return;
+    }
+
+    const ImVec2 drag = io.MousePos - start;
+    if (drag.y * drag.y <= drag.x * drag.x) {
+        return; // Ignore horizontal gestures (e.g. adjusting a slider).
+    }
+
+    if (!isSidebar) {
+        // A slider, checkbox, combo or other active control must keep its drag.
+        // Checking the active item's window also avoids blocking scrolling just
+        // because the search field in a DIFFERENT child still has keyboard focus.
+        const ImGuiWindow* current = ImGui::GetCurrentWindow();
+        const ImGuiWindow* active = GImGui->ActiveIdWindow;
+        // ImGui also activates a window's MoveId on an empty-space click,
+        // even when NoMove prevents the window from moving. That isn't a
+        // widget interaction and must not suppress touch scrolling.
+        if (active != nullptr && GImGui->ActiveId != active->MoveId) {
+            while (active != nullptr) {
+                if (active == current) {
+                    return;
+                }
+                active = active->ParentWindow;
+            }
+        }
+    }
+
+    ImGui::SetScrollY(ImGui::GetScrollY() - io.MouseDelta.y);
+}
+#endif
+
 void Menu::InsertSidebarSearch() {
     menuEntries["Settings"].sidebars.emplace("Search", searchSidebarEntry);
     uint32_t curIndex = 0;
@@ -153,6 +207,13 @@ bool ModernMenuSidebarEntry(std::string label) {
     ImGui::ItemAdd(bb, sidebarId);
     bool hovered, held;
     bool pressed = ImGui::ButtonBehavior(bb, sidebarId, &hovered, &held);
+#if defined(__ANDROID__)
+    // A swipe over a category must not switch sections on finger release.
+    if (pressed && ImGui::GetIO().MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] >
+                       kAndroidMenuDragThreshold * kAndroidMenuDragThreshold) {
+        pressed = false;
+    }
+#endif
     if (pressed) {
         ImGui::MarkItemEdited(sidebarId);
     }
@@ -878,6 +939,9 @@ void Menu::DrawElement() {
             sectionIndex = nextIndex;
         }
     }
+#if defined(__ANDROID__)
+    AndroidMenuScrollChild(true);
+#endif
     ImGui::EndChild();
 
 #if defined(__ANDROID__)
@@ -928,6 +992,9 @@ void Menu::DrawElement() {
             menuSearch.Clear();
         }
 
+#if defined(__ANDROID__)
+        AndroidMenuScrollChild(false); // Nested Search Results child.
+#endif
         ImGui::EndChild();
     } else {
         std::string menuLabel = menuEntries.at(headerIndex).label;
@@ -958,6 +1025,9 @@ void Menu::DrawElement() {
         }
     }
     if (!useColumns || menuSearchText.length() > 0) {
+#if defined(__ANDROID__)
+        AndroidMenuScrollChild(false);
+#endif
         ImGui::EndChild();
     }
     ImGui::PopFont();
