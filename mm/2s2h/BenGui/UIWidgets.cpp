@@ -8,12 +8,13 @@
 #include "2s2h/ShipUtils.h"
 #include <spdlog/fmt/fmt.h>
 #include "2s2h/BenPort.h"
+#include "AndroidMenuStyle.h"
 
 namespace UIWidgets {
 
 static ImVec2 AndroidCompactPadding(ImVec2 padding) {
 #if defined(__ANDROID__)
-    return ImVec2(std::min(padding.x, 6.0f), std::min(padding.y, 3.0f));
+    return AndroidMenuStyle::WidgetPadding(padding);
 #else
     return padding;
 #endif

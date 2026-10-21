@@ -55,22 +55,6 @@ static const std::unordered_map<int32_t, const char*> touchFaceButtonLayoutMap =
     { 2, "GC Layout" },
 };
 
-static void ApplyAndroidMenuScale(float scale) {
-    if (scale < 1.0f) {
-        scale = 1.0f;
-    } else if (scale > 3.0f) {
-        scale = 3.0f;
-    }
-
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.FramePadding = ImVec2(4.0f * scale, 6.0f * scale);
-    style.ItemSpacing = ImVec2(8.0f * scale, 6.0f * scale);
-    style.ItemInnerSpacing = ImVec2(4.0f * scale, 4.0f * scale);
-    style.ScrollbarSize = 14.0f * scale;
-    style.GrabMinSize = 12.0f * scale;
-    ImGui::GetIO().FontGlobalScale = scale;
-}
-
 static void SetAndroidTouchControlsDisabled(bool disabled) {
     JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
     jobject activity = (jobject)SDL_AndroidGetActivity();
@@ -486,10 +470,10 @@ void BenMenu::AddSettings() {
     AddWidget(path, "Menu Scale: %.2fx", WIDGET_CVAR_SLIDER_FLOAT)
         .CVar("gSettings.Menu.AndroidScale")
         .Callback([](WidgetInfo& info) {
-            ApplyAndroidMenuScale(CVarGetFloat("gSettings.Menu.AndroidScale", 1.45f));
+            AndroidMenuStyle::Apply(CVarGetFloat("gSettings.Menu.AndroidScale", AndroidMenuStyle::DefaultScale));
         })
         .Options(FloatSliderOptions()
-                     .DefaultValue(1.45f)
+                     .DefaultValue(AndroidMenuStyle::DefaultScale)
                      .Min(1.0f)
                      .Max(3.0f)
                      .Step(0.05f)

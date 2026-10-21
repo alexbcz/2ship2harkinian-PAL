@@ -2,6 +2,7 @@
 #define BENMENU_H
 
 #include "UIWidgets.hpp"
+#include "AndroidMenuStyle.h"
 #include "Menu.h"
 #include "2s2h/Enhancements/Enhancements.h"
 #include "2s2h/DeveloperTools/DeveloperTools.h"
