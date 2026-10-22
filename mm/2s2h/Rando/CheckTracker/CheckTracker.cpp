@@ -632,6 +632,37 @@ void CheckTrackerWindow::Draw() {
     ImGui::PopStyleVar(1);
 }
 
+#if defined(__ANDROID__)
+// Keep a check's color swatch next to its display-mode selector on touch screens.
+// The desktop layout is left unchanged below.
+static void DrawMobileCheckDisplayMode(const char* label, const char* modeCvar, const char* colorCvar,
+                                      Color_RGBA8 defaultColor, int defaultMode) {
+    ImGui::PushID(label);
+    const float comboWidth = UIWidgets::CalcComboWidth("Colored", ImGuiComboFlags_None);
+    const float swatchWidth = ImGui::GetFrameHeight();
+    if (ImGui::BeginTable("##ModeRow", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings)) {
+        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Color", ImGuiTableColumnFlags_WidthFixed, swatchWidth);
+        ImGui::TableSetupColumn("Mode", ImGuiTableColumnFlags_WidthFixed, comboWidth);
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextUnformatted(label);
+        ImGui::TableSetColumnIndex(1);
+        if (CVarGetInteger(modeCvar, defaultMode) == CHECK_MODE_COLORED) {
+            ImGui::PushItemWidth(swatchWidth);
+            UIWidgets::CVarColorPicker("##Color", colorCvar, defaultColor, true);
+            ImGui::PopItemWidth();
+        }
+        ImGui::TableSetColumnIndex(2);
+        UIWidgets::CVarCombobox("##Mode", modeCvar, &sCheckModes,
+                                UIWidgets::ComboboxOptions().DefaultIndex(defaultMode)
+                                    .LabelPosition(UIWidgets::LabelPosition::None));
+        ImGui::EndTable();
+    }
+    ImGui::PopID();
+}
+#endif
+
 void SettingsWindow::DrawElement() {
     if (CVarGetInteger("gWindows.CheckTracker", 0)) {
         UIWidgets::WindowButton("Disable Check Tracker", "gWindows.CheckTracker", BenGui::mRandoCheckTrackerWindow,
@@ -640,12 +671,23 @@ void SettingsWindow::DrawElement() {
         UIWidgets::WindowButton("Enable Check Tracker", "gWindows.CheckTracker", BenGui::mRandoCheckTrackerWindow,
                                 { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Green });
     }
-    if (ImGui::BeginTable("Settings Table", 2)) {
+#if defined(__ANDROID__)
+    constexpr int settingsColumns = 1;
+#else
+    constexpr int settingsColumns = 2;
+#endif
+    if (ImGui::BeginTable("Settings Table", settingsColumns)) {
         ImGui::TableSetupColumn("col1", ImGuiTableColumnFlags_WidthStretch);
+#if !defined(__ANDROID__)
         ImGui::TableSetupColumn("col2", ImGuiTableColumnFlags_WidthStretch);
+#endif
         ImGui::TableNextColumn();
         ImGui::SeparatorText("Check Settings");
         // UIWidgets::CVarCheckbox("Dim Out of Logic Checks", CVAR_NAME_OUT_OF_LOGIC_MODE);
+#if defined(__ANDROID__)
+        DrawMobileCheckDisplayMode("Out of Logic Checks", CVAR_NAME_OUT_OF_LOGIC_MODE,
+                                   CVAR_NAME_OUT_OF_LOGIC_COLOR ".Value", { 255, 255, 255, 100 }, 1);
+#else
         UIWidgets::CVarCombobox("Out of Logic Checks", CVAR_NAME_OUT_OF_LOGIC_MODE, &sCheckModes,
                                 UIWidgets::ComboboxOptions()
                                     .DefaultIndex(1)
@@ -656,6 +698,11 @@ void SettingsWindow::DrawElement() {
             UIWidgets::CVarColorPicker("##OutOfLogicColor", CVAR_NAME_OUT_OF_LOGIC_COLOR ".Value",
                                        { 255, 255, 255, 100 }, true);
         }
+#endif
+#if defined(__ANDROID__)
+        DrawMobileCheckDisplayMode("Collected Checks", CVAR_NAME_COLLECTED_MODE,
+                                   CVAR_NAME_COLLECTED_COLOR ".Value", { 100, 255, 100, 255 }, 2);
+#else
         UIWidgets::CVarCombobox("Collected Checks", CVAR_NAME_COLLECTED_MODE, &sCheckModes,
                                 UIWidgets::ComboboxOptions()
                                     .DefaultIndex(2)
@@ -666,6 +713,11 @@ void SettingsWindow::DrawElement() {
             UIWidgets::CVarColorPicker("##CollectedColor", CVAR_NAME_COLLECTED_COLOR ".Value", { 100, 255, 100, 255 },
                                        true);
         }
+#endif
+#if defined(__ANDROID__)
+        DrawMobileCheckDisplayMode("Skipped Checks", CVAR_NAME_SKIPPED_MODE,
+                                   CVAR_NAME_SKIPPED_COLOR ".Value", { 255, 100, 255, 255 }, 2);
+#else
         UIWidgets::CVarCombobox("Skipped Checks", CVAR_NAME_SKIPPED_MODE, &sCheckModes,
                                 UIWidgets::ComboboxOptions()
                                     .DefaultIndex(2)
@@ -676,6 +728,7 @@ void SettingsWindow::DrawElement() {
             UIWidgets::CVarColorPicker("##SkippedColor", CVAR_NAME_SKIPPED_COLOR ".Value", { 255, 100, 255, 255 },
                                        true);
         }
+#endif
         UIWidgets::CVarCheckbox("Only Show Current Scene", CVAR_NAME_SHOW_CURRENT_SCENE);
         UIWidgets::CVarCheckbox("Auto Scroll To Current Scene", CVAR_NAME_SCROLL_TO_SCENE,
                                 UIWidgets::CheckboxOptions().DefaultValue(true));

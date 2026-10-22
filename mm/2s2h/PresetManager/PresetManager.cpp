@@ -894,11 +894,18 @@ void PresetManager_Draw() {
     ImGui::TextWrapped("Drag and drop a preset file into the window to load it, or drop it into the presets folder and "
                        "refresh the list.");
     ImGui::PopStyleColor();
-    if (UIWidgets::Button("Open Presets Folder", { .size = ImVec2(ImGui::GetContentRegionAvail().x - 42, 0) })) {
+#if defined(__ANDROID__)
+    const float openFolderWidth = ImGui::GetContentRegionAvail().x;
+#else
+    const float openFolderWidth = ImGui::GetContentRegionAvail().x - 42.0f;
+#endif
+    if (UIWidgets::Button("Open Presets Folder", { .size = ImVec2(openFolderWidth, 0) })) {
         std::string path = "file:///" + std::filesystem::absolute(presetsFolderPath).string();
         SDL_OpenURL(path.c_str());
     }
+#if !defined(__ANDROID__)
     ImGui::SameLine();
+#endif
     if (UIWidgets::Button(ICON_FA_REFRESH)) {
         PresetManager_RefreshPresets();
     }
@@ -922,13 +929,31 @@ void PresetManager_Draw() {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(5, 6));
         for (const auto& category : categories) {
             if (index++ > 0) {
+#if defined(__ANDROID__)
+                // Tags may wrap across rows on small screens.
+                const float categoryWidth = ImGui::CalcTextSize(category.c_str()).x +
+                                            ImGui::GetStyle().FramePadding.x * 2.0f;
+                const float rightEdge = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+                if (ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x + categoryWidth <= rightEdge) {
+                    ImGui::SameLine();
+                }
+#else
                 ImGui::SameLine();
+#endif
             }
             ImGui::Button(category.c_str());
         }
         ImGui::PopStyleVar(3);
         ImGui::PopStyleColor(3);
         ImGui::EndGroup();
+#if defined(__ANDROID__)
+        // Android controls are larger; keep the action on a separate full-width row.
+        if (UIWidgets::Button("Apply", { .size = ImVec2(ImGui::GetContentRegionAvail().x, 0),
+                                          .color = UIWidgets::Colors::Orange })) {
+            clickedPreset = preset;
+        }
+        ImGui::Spacing();
+#else
         auto lastGroupSize = ImGui::GetItemRectSize();
         auto lastGroupPos = ImGui::GetCursorPosY();
         // Vertically align to center, horizontally align to the right
@@ -940,6 +965,7 @@ void PresetManager_Draw() {
             clickedPreset = preset;
         }
         ImGui::EndGroup();
+#endif
         // ImGui::SeparatorText("");
         ImGui::PopID();
     }

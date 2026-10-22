@@ -236,6 +236,16 @@ bool IconButton(const char* strId, const char* icon, const ButtonOptions& option
 
 bool WindowButton(const char* label, const char* cvarName, std::shared_ptr<Ship::GuiWindow> windowPtr,
                   const WindowButtonOptions& options) {
+#if defined(__ANDROID__)
+    // Popout windows duplicate an embedded editor on mobile and consume scarce
+    // screen space. Keep the editor embedded without disabling normal pickers.
+    if (std::string(label).rfind("Popout ", 0) == 0) {
+        if (windowPtr && windowPtr->IsVisible()) {
+            windowPtr->ToggleVisibility();
+        }
+        return false;
+    }
+#endif
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0, 0));
     std::string buttonText = label;
     bool dirty = false;

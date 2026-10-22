@@ -48,11 +48,21 @@ void EnTest4_GetBellTimeAndShrinkScreenBeforeDay3(EnTest4* thisx, PlayState* pla
 }
 
 bool safeMode = true;
+// Scale item grids consistently in the mobile Save Editor.  The spacing also
+// leaves room for the ammo fields shown underneath some inventory icons.
+#if defined(__ANDROID__)
+constexpr float INV_GRID_WIDTH = 68.0f;
+constexpr float INV_GRID_HEIGHT = 96.0f;
+constexpr float INV_GRID_ICON_SIZE = 52.0f;
+constexpr float INV_GRID_PADDING = 10.0f;
+constexpr float INV_GRID_TOP_MARGIN = 12.0f;
+#else
 constexpr float INV_GRID_WIDTH = 46.0f;
 constexpr float INV_GRID_HEIGHT = 58.0f;
 constexpr float INV_GRID_ICON_SIZE = 40.0f;
 constexpr float INV_GRID_PADDING = 10.0f;
 constexpr float INV_GRID_TOP_MARGIN = 20.0f;
+#endif
 constexpr uint16_t HEART_COUNT_MIN = 3;
 constexpr uint16_t HEART_COUNT_MAX = 20;
 constexpr int16_t S16_ZERO = 0;
@@ -253,7 +263,9 @@ void DrawTempleClears() {
         inverted = Flags_GetSwitch(gPlayState, 20);
     }
 
+#if !defined(__ANDROID__)
     ImGui::Columns(2, nullptr, false);
+#endif
 
     // Left column: Cleared checkboxes
     // Woodfall
@@ -296,7 +308,11 @@ void DrawTempleClears() {
         }
     }
 
+#if defined(__ANDROID__)
+    ImGui::SeparatorText("Open / Inverted");
+#else
     ImGui::NextColumn();
+#endif
 
     // Right column: Open/Inverted checkboxes
     // Woodfall
@@ -363,7 +379,9 @@ void DrawTempleClears() {
         }
     }
 
+#if !defined(__ANDROID__)
     ImGui::Columns(1);
+#endif
 }
 
 void DrawGeneralTab() {
@@ -371,7 +389,12 @@ void DrawGeneralTab() {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
     ImGui::BeginChild("generalTab", ImVec2(0, 0), true);
 
+#if defined(__ANDROID__)
+    // Keep each editor card readable at the larger Android font scale.
+    UIWidgets::BeginCardLayout({ .columnsPerRow = 1, .minColumnWidth = 1.0f });
+#else
     UIWidgets::BeginCardLayout({ .columnsPerRow = 2, .minColumnWidth = 420.0f });
+#endif
 
     // Card 1: Player Identity
     UIWidgets::BeginCard("identityCard");
@@ -634,10 +657,19 @@ void DrawAmmoInput(InventorySlot slot) {
     int y = ((int)floor(slot / 6) % 4);
     ItemId currentItemId = static_cast<ItemId>(gSaveContext.save.saveInfo.inventory.items[slot]);
 
-    ImGui::SetCursorPos(
-        ImVec2(x * INV_GRID_WIDTH + INV_GRID_PADDING + 7.0f,
-               y * INV_GRID_HEIGHT + INV_GRID_TOP_MARGIN + INV_GRID_PADDING + (INV_GRID_ICON_SIZE - 2.0f)));
+#if defined(__ANDROID__)
+    constexpr float ammoOffsetX = 0.0f;
+#else
+    constexpr float ammoOffsetX = 7.0f;
+#endif
+    ImGui::SetCursorPos(ImVec2(x * INV_GRID_WIDTH + INV_GRID_PADDING + ammoOffsetX,
+                               y * INV_GRID_HEIGHT + INV_GRID_TOP_MARGIN + INV_GRID_PADDING +
+                                   (INV_GRID_ICON_SIZE - 2.0f)));
+#if defined(__ANDROID__)
+    ImGui::PushItemWidth(INV_GRID_ICON_SIZE);
+#else
     ImGui::PushItemWidth(24.0f);
+#endif
     ImGui::PushStyleColor(ImGuiCol_FrameBg, UIWidgets::ColorValues.at(UIWidgets::Colors::Gray));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 4.0f));
@@ -846,25 +878,43 @@ void DrawSlot(InventorySlot slot) {
 void DrawItemsAndMasksTab() {
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
-    // Group left side in a child for a scroll bar
+#if !defined(__ANDROID__)
+    // Desktop keeps a dedicated scrolling left grid column.
     ImGui::BeginChild("leftSide##items", ImVec2(0, 0), ImGuiChildFlags_AutoResizeX);
+#endif
     ImGui::BeginGroup();
+#if defined(__ANDROID__)
+    const float gridPanelWidth = 0.0f; // Match the full available Android width.
+#else
+    const float gridPanelWidth = INV_GRID_WIDTH * 6 + INV_GRID_PADDING * 2;
+#endif
+#if defined(__ANDROID__)
+    constexpr ImGuiWindowFlags gridScrollFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+    ImGui::SeparatorText("Items");
+#else
+    constexpr ImGuiWindowFlags gridScrollFlags = ImGuiWindowFlags_None;
+#endif
     ImGui::BeginChild("itemsBox",
-                      ImVec2(INV_GRID_WIDTH * 6 + INV_GRID_PADDING * 2,
-                             INV_GRID_HEIGHT * 4 + INV_GRID_PADDING * 2 + INV_GRID_TOP_MARGIN),
-                      ImGuiChildFlags_Border);
+                      ImVec2(gridPanelWidth, INV_GRID_HEIGHT * 4 + INV_GRID_PADDING * 2 + INV_GRID_TOP_MARGIN),
+                      ImGuiChildFlags_Border, gridScrollFlags);
+#if !defined(__ANDROID__)
     ImGui::Text("Items");
+#endif
     for (uint32_t i = SLOT_OCARINA; i <= SLOT_BOTTLE_6; i++) {
         InventorySlot slot = static_cast<InventorySlot>(i);
 
         DrawSlot(slot);
     }
     ImGui::EndChild();
+#if defined(__ANDROID__)
+    ImGui::SeparatorText("Masks");
+#endif
     ImGui::BeginChild("masksBox",
-                      ImVec2(INV_GRID_WIDTH * 6 + INV_GRID_PADDING * 2,
-                             INV_GRID_HEIGHT * 4 + INV_GRID_PADDING * 2 + INV_GRID_TOP_MARGIN),
-                      ImGuiChildFlags_Border);
+                      ImVec2(gridPanelWidth, INV_GRID_HEIGHT * 4 + INV_GRID_PADDING * 2 + INV_GRID_TOP_MARGIN),
+                      ImGuiChildFlags_Border, gridScrollFlags);
+#if !defined(__ANDROID__)
     ImGui::Text("Masks");
+#endif
     for (uint32_t i = SLOT_MASK_POSTMAN; i <= SLOT_MASK_FIERCE_DEITY; i++) {
         InventorySlot slot = static_cast<InventorySlot>(i);
 
@@ -872,10 +922,13 @@ void DrawItemsAndMasksTab() {
     }
     ImGui::EndChild();
     ImGui::EndGroup();
+#if defined(__ANDROID__)
+    ImGui::Separator();
+#else
     ImGui::EndChild();
-
     ImGui::SameLine();
     ImGui::BeginChild("equipsBox", ImVec2(0, 0), true);
+#endif
     if (UIWidgets::Button("Give All##items")) {
         for (int32_t i = 0; i <= SLOT_MASK_FIERCE_DEITY; i++) {
             if (i >= SLOT_BOTTLE_1 && i <= SLOT_BOTTLE_6) {
@@ -1048,7 +1101,9 @@ void DrawItemsAndMasksTab() {
     // ImGui::Text("Equips");
     // ImGui::Text("C-Buttons");
     // ImGui::Text("D-Pad");
-    ImGui::EndChild();
+#if !defined(__ANDROID__)
+    ImGui::EndChild(); // equipsBox.
+#endif
     ImGui::PopStyleVar(2);
 }
 
@@ -1174,12 +1229,22 @@ void NextQuestInSlot(QuestItem slot) {
 }
 
 void DrawQuestSlot(QuestItem slot) {
+#if !defined(__ANDROID__)
     int x = slot % 6;
     int y = ((int)floor(slot / 6) % 4);
+#endif
     ImGui::PushID(slot);
 
+#if defined(__ANDROID__)
+    // Quest remains follow the separator in the normal ImGui layout, instead
+    // of jumping to the top of the child and overlapping the section title.
+    if (slot != QUEST_REMAINS_ODOLWA) {
+        ImGui::SameLine();
+    }
+#else
     ImGui::SetCursorPos(
         ImVec2(x * INV_GRID_WIDTH + INV_GRID_PADDING, y * INV_GRID_HEIGHT + INV_GRID_TOP_MARGIN + INV_GRID_PADDING));
+#endif
 
     ImTextureID textureId =
         std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
@@ -1216,7 +1281,11 @@ void DrawQuestStatusTab() {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 1.0f, 1.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
+#if defined(__ANDROID__)
+    ImGui::BeginGroup();
+#else
     ImGui::BeginChild("questTab", ImVec2(0, 0), true);
+#endif
 
     if (UIWidgets::Button("Give All##items", { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Green })) {
         for (int32_t i = QUEST_REMAINS_ODOLWA; i <= QUEST_BOMBERS_NOTEBOOK; i++) {
@@ -1254,7 +1323,9 @@ void DrawQuestStatusTab() {
             }
         }
     }
+#if !defined(__ANDROID__)
     ImGui::BeginChild("leftColumn", ImVec2(ImGui::GetWindowWidth() / 2, 0));
+#endif
     ImGui::SeparatorText("Boss Remains");
     for (int32_t i = QUEST_REMAINS_ODOLWA; i <= QUEST_REMAINS_TWINMOLD; i++) {
         QuestItem slot = static_cast<QuestItem>(i);
@@ -1337,14 +1408,20 @@ void DrawQuestStatusTab() {
         ImGui::EndCombo();
     }
     UIWidgets::PopStyleCombobox();
+#if !defined(__ANDROID__)
     ImGui::EndChild();
     ImGui::SameLine();
     ImGui::BeginChild("rightColumn", ImVec2(0, 0));
+#endif
     ImGui::SeparatorText("Gold Skulltula Tokens");
     int OceanSkullTokens = Inventory_GetSkullTokenCount(SCENE_KINDAN2);
     int SwampSkullTokens = Inventory_GetSkullTokenCount(SCENE_KINSTA1);
     UIWidgets::PushStyleSlider();
+#if defined(__ANDROID__)
+    ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
+#else
     ImGui::PushItemWidth(ImGui::GetWindowWidth());
+#endif
     if (ImGui::SliderInt("##swampSkulltulas", &SwampSkullTokens, 0, 30, "Swamp Tokens: %d")) {
         gSaveContext.save.saveInfo.skullTokenCount =
             ((int)(SwampSkullTokens & 0xFFFF) << 0x10) | (gSaveContext.save.saveInfo.skullTokenCount & 0xFFFF);
@@ -1356,8 +1433,14 @@ void DrawQuestStatusTab() {
     ImGui::PopItemWidth();
     UIWidgets::PopStyleSlider();
 
-    ImGui::EndChild();
-    ImGui::EndChild();
+#if !defined(__ANDROID__)
+    ImGui::EndChild(); // rightColumn.
+#endif
+#if defined(__ANDROID__)
+    ImGui::EndGroup();
+#else
+    ImGui::EndChild(); // questTab.
+#endif
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(1);
 }
@@ -1379,27 +1462,49 @@ void DrawDungeonItemTab() {
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+#if defined(__ANDROID__)
+    ImGui::BeginGroup();
+#else
     ImGui::BeginChild("dungeonTab", ImVec2(0, 0), true);
+#endif
 
     for (int i = DUNGEON_SCENE_INDEX_WOODFALL_TEMPLE; i <= DUNGEON_SCENE_INDEX_STONE_TOWER_TEMPLE; i++) {
+#if !defined(__ANDROID__)
         std::string stray_id = "Stray" + std::to_string(i);
+        std::string sKey_id = "Small Key" + std::to_string(i);
+#endif
         std::string map_id = "Map" + std::to_string(i);
         std::string comp_id = "Compass" + std::to_string(i);
-        std::string sKey_id = "Small Key" + std::to_string(i);
         std::string bKey_id = "Boss Key" + std::to_string(i);
         int dungeonId = i;
+#if !defined(__ANDROID__)
+        const float dungeonPanelWidth = INV_GRID_WIDTH * 6 + INV_GRID_PADDING * 2;
+#endif
+#if defined(__ANDROID__)
+        ImGui::PushID(i);
+        ImGui::SeparatorText(dungeonNames[i]);
+#else
         ImGui::BeginChild(std::to_string(i).c_str(),
-                          ImVec2(INV_GRID_WIDTH * 6 + INV_GRID_PADDING * 2, INV_GRID_HEIGHT * 1.5 + INV_GRID_PADDING),
+                          ImVec2(dungeonPanelWidth, INV_GRID_HEIGHT * 1.5 + INV_GRID_PADDING),
                           ImGuiChildFlags_Border);
         ImGui::Text("%s", dungeonNames[i]);
-        if (ImGui::ImageButton(
-                stray_id.c_str(),
-                std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
-                    ->GetTextureByName(fairyIcons[dungeonId]),
-                ImVec2(INV_GRID_ICON_SIZE, INV_GRID_ICON_SIZE), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0),
-                ImVec4(1, 1, 1, gSaveContext.save.saveInfo.inventory.strayFairies[dungeonId] ? 1.0f : 0.4f))) {
+#endif
+        const ImTextureID fairyTexture =
+            std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                ->GetTextureByName(fairyIcons[dungeonId]);
+#if defined(__ANDROID__)
+        // The inline value control below replaces the popup triggered by this icon.
+        ImGui::Image(const_cast<void*>(fairyTexture), ImVec2(INV_GRID_ICON_SIZE, INV_GRID_ICON_SIZE), ImVec2(0, 0), ImVec2(1, 1),
+                     ImVec4(1, 1, 1, gSaveContext.save.saveInfo.inventory.strayFairies[dungeonId] ? 1.0f : 0.4f),
+                     ImVec4(0, 0, 0, 0));
+#else
+        if (ImGui::ImageButton(stray_id.c_str(), fairyTexture, ImVec2(INV_GRID_ICON_SIZE, INV_GRID_ICON_SIZE),
+                               ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0),
+                               ImVec4(1, 1, 1, gSaveContext.save.saveInfo.inventory.strayFairies[dungeonId] ? 1.0f
+                                                                                                        : 0.4f))) {
             ImGui::OpenPopup("strayFairies");
         }
+#endif
         ImGui::SameLine();
         if (ImGui::ImageButton(
                 map_id.c_str(),
@@ -1419,14 +1524,20 @@ void DrawDungeonItemTab() {
             SetDungeonItems(DUNGEON_COMPASS, i);
         }
         ImGui::SameLine();
-        if (ImGui::ImageButton(
-                sKey_id.c_str(),
-                std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
-                    ->GetTextureByName(gQuestIconSmallKeyTex),
-                ImVec2(INV_GRID_ICON_SIZE, INV_GRID_ICON_SIZE), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0),
-                ImVec4(1, 1, 1, DUNGEON_KEY_COUNT(i) + 1 ? 1.0f : 0.4f))) {
+        const ImTextureID keyTexture =
+            std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                ->GetTextureByName(gQuestIconSmallKeyTex);
+#if defined(__ANDROID__)
+        ImGui::Image(const_cast<void*>(keyTexture), ImVec2(INV_GRID_ICON_SIZE, INV_GRID_ICON_SIZE), ImVec2(0, 0), ImVec2(1, 1),
+                     ImVec4(1, 1, 1, DUNGEON_KEY_COUNT(i) + 1 ? 1.0f : 0.4f),
+                     ImVec4(0, 0, 0, 0));
+#else
+        if (ImGui::ImageButton(sKey_id.c_str(), keyTexture, ImVec2(INV_GRID_ICON_SIZE, INV_GRID_ICON_SIZE),
+                               ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0),
+                               ImVec4(1, 1, 1, DUNGEON_KEY_COUNT(i) + 1 ? 1.0f : 0.4f))) {
             ImGui::OpenPopup("smallKeys");
         }
+#endif
         ImGui::SameLine();
         if (ImGui::ImageButton(
                 bKey_id.c_str(),
@@ -1436,6 +1547,26 @@ void DrawDungeonItemTab() {
                 ImVec4(1, 1, 1, CHECK_DUNGEON_ITEM(DUNGEON_BOSS_KEY, i) ? 1.0f : 0.4f))) {
             SetDungeonItems(DUNGEON_BOSS_KEY, i);
         }
+#if defined(__ANDROID__)
+        // Sliders are usable in-line on Android: avoid two tiny popup editors
+        // and four one-line children with their own scrollbars.
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
+        UIWidgets::PushStyleSlider(UIWidgets::Colors(CVarGetInteger("gSettings.Menu.Theme", 5)));
+        int currentStrays = gSaveContext.save.saveInfo.inventory.strayFairies[dungeonId];
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+        if (ImGui::SliderInt("##StrayFairiesMobile", &currentStrays, 0, 15, "Stray Fairies: %d")) {
+            gSaveContext.save.saveInfo.inventory.strayFairies[dungeonId] = currentStrays;
+        }
+        int currentKeys = gSaveContext.save.saveInfo.inventory.dungeonKeys[dungeonId];
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+        if (ImGui::SliderInt("##SmallKeysMobile", &currentKeys, -1, smallKeyCounts[dungeonId], "Small Keys: %d")) {
+            gSaveContext.save.saveInfo.inventory.dungeonKeys[dungeonId] = currentKeys;
+        }
+        UIWidgets::PopStyleSlider();
+        ImGui::PopStyleVar();
+        ImGui::PopID();
+        ImGui::Spacing();
+#else
         if (ImGui::BeginPopup("strayFairies")) {
             UIWidgets::PushStyleSlider(UIWidgets::Colors(CVarGetInteger("gSettings.Menu.Theme", 5)));
             s32 minStray = 0;
@@ -1465,8 +1596,13 @@ void DrawDungeonItemTab() {
             ImGui::EndPopup();
         }
         ImGui::EndChild();
+#endif
     }
+#if defined(__ANDROID__)
+    ImGui::EndGroup();
+#else
     ImGui::EndChild();
+#endif
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(1);
 }
@@ -1551,7 +1687,11 @@ void DrawPlayerTab() {
     if (gPlayState) {
         Player* player = GET_PLAYER(gPlayState);
 
+#if defined(__ANDROID__)
+        UIWidgets::BeginCardLayout({ .columnsPerRow = 1, .minColumnWidth = 1.0f });
+#else
         UIWidgets::BeginCardLayout({ .columnsPerRow = 2, .minColumnWidth = 420.0f });
+#endif
 
         UIWidgets::BeginCard("playerSpeed");
         ImGui::Text("Link's Speed");
@@ -1573,15 +1713,23 @@ void DrawPlayerTab() {
         UIWidgets::PushStyleCombobox(formColor);
         ImGui::PushItemWidth(ImGui::GetFontSize() * 6);
         ImGui::InputScalar("X Pos", ImGuiDataType_Float, &player->actor.world.pos.x);
+#if !defined(__ANDROID__)
         ImGui::SameLine();
+#endif
         ImGui::InputScalar("Y Pos", ImGuiDataType_Float, &player->actor.world.pos.y);
+#if !defined(__ANDROID__)
         ImGui::SameLine();
+#endif
         ImGui::InputScalar("Z Pos", ImGuiDataType_Float, &player->actor.world.pos.z);
         ImGui::Text("Rotation:");
         ImGui::InputScalar("X Rot", ImGuiDataType_S16, &player->actor.world.rot.x);
+#if !defined(__ANDROID__)
         ImGui::SameLine();
+#endif
         ImGui::InputScalar("Y Rot", ImGuiDataType_S16, &player->actor.world.rot.y);
+#if !defined(__ANDROID__)
         ImGui::SameLine();
+#endif
         ImGui::InputScalar("Z Rot", ImGuiDataType_S16, &player->actor.world.rot.z);
         ImGui::PopItemWidth();
         UIWidgets::PopStyleCombobox();
@@ -1615,9 +1763,11 @@ void DrawPlayerTab() {
                 Player_PlaySfx(GET_PLAYER(gPlayState), NA_SE_SY_TRANSFORM_MASK_FLASH);
             }
             UIWidgets::PopStyleButton();
+#if !defined(__ANDROID__)
             if (i != PLAYER_FORM_HUMAN) {
                 ImGui::SameLine();
             }
+#endif
         }
 
         ImGui::Separator();
@@ -1677,8 +1827,10 @@ void DrawPlayerTab() {
         UIWidgets::BeginCard("currentItems");
         ImGui::Text("Current Items");
 
-        // Two-column layout
+        // One column on Android so the equipment labels remain visible.
+#if !defined(__ANDROID__)
         ImGui::Columns(2, nullptr, false);
+#endif
 
         // Left column: C-buttons
         ImGui::PushItemWidth(ImGui::GetFontSize() * 6);
@@ -1692,7 +1844,11 @@ void DrawPlayerTab() {
         ImGui::PopItemWidth();
 
         // Right column: D-pad
+#if !defined(__ANDROID__)
         ImGui::NextColumn();
+#else
+        ImGui::Separator();
+#endif
         ImGui::PushItemWidth(ImGui::GetFontSize() * 6);
         UIWidgets::PushStyleInput();
         ImGui::InputScalar("D-Pad Right", ImGuiDataType_U8, &DPAD_GET_CUR_FORM_BTN_ITEM(EQUIP_SLOT_D_RIGHT), &one,
@@ -1703,7 +1859,9 @@ void DrawPlayerTab() {
         UIWidgets::PopStyleInput();
         ImGui::PopItemWidth();
 
+#if !defined(__ANDROID__)
         ImGui::Columns(1);
+#endif
 
         // Clear All button
         ImGui::Spacing();
@@ -1774,16 +1932,26 @@ void DrawRegEditorTab() {
     ImGui::SliderScalar("Reg Page", ImGuiDataType_U8, &gRegEditor->regPage, &S8_ZERO, &REG_PAGES_MAX, "%d");
     UIWidgets::PopStyleSlider();
 
+#if defined(__ANDROID__)
+    ImGui::BeginGroup();
+#else
     ImGui::BeginChild("regSliders", ImVec2(0, 0), ImGuiChildFlags_Border);
-
     ImGui::Columns(2, nullptr, false);
     ImGui::SetColumnWidth(0, 100.0f);
+#endif
 
     for (int i = 0; i < REG_PER_PAGE; i++) {
         ImGui::PushID(i);
+#if defined(__ANDROID__)
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%02X (%d)", i + gRegEditor->regPage * REG_PER_PAGE, i + gRegEditor->regPage * REG_PER_PAGE);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(-FLT_MIN); // Fill remaining width beside the label.
+#else
         ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 4.0f);
         ImGui::Text("%02X (%d)", i + gRegEditor->regPage * REG_PER_PAGE, i + gRegEditor->regPage * REG_PER_PAGE);
         ImGui::NextColumn();
+#endif
         ImGui::PushStyleColor(ImGuiCol_FrameBg, UIWidgets::ColorValues.at(UIWidgets::Colors::Gray));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 8.0f));
@@ -1793,24 +1961,57 @@ void DrawRegEditorTab() {
             NULL, NULL, "%d");
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(1);
+#if !defined(__ANDROID__)
         ImGui::NextColumn();
         ImGui::PopItemWidth();
+#endif
         ImGui::PopID();
     }
 
+#if defined(__ANDROID__)
+    ImGui::EndGroup();
+#else
     ImGui::Columns(1);
-
     ImGui::EndChild();
+#endif
 }
 
 const char* flagEditorSections[] = { "currentSceneFlags", "weekEventReg",  "eventInf",
                                      "scenesVisible",     "owlActivation", "permanentSceneFlags",
                                      "cycleSceneFlags",   "randoInf",      "collectedHearts" };
 
+#if defined(__ANDROID__)
+// Keep the label and its two actions together if they fit at the current font
+// size; narrower landscape viewports can still fall back to the next line.
+static void AndroidFlagActionsSameLineIfFits() {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float actionWidth = ImGui::CalcTextSize("All").x + ImGui::CalcTextSize("Clear").x +
+                              4.0f * ImMax(style.FramePadding.x, 10.0f) +
+                              2.0f * style.ItemSpacing.x + 16.0f;
+    const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+    if (ImGui::GetItemRectMax().x + actionWidth <= right) {
+        ImGui::SameLine();
+    }
+}
+#endif
+
+// Draw the individual grid cells at their original compact spacing, but
+// leave a small gap before the next flag group on Android.
+static void DrawEditorFlagArray32(const std::string& name, uint32_t& flags) {
+    UIWidgets::DrawFlagArray32(name, flags);
+#if defined(__ANDROID__)
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * 0.35f));
+#endif
+}
+
 void DrawFlagsTab() {
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
+#if defined(__ANDROID__)
+    ImGui::BeginGroup();
+#else
     ImGui::BeginChild("flagsBox", ImVec2(0, 0), true);
+#endif
     static int selectedFlagSection = 0;
     UIWidgets::Combobox("Flag Type", &selectedFlagSection, flagEditorSections,
                         {
@@ -1829,14 +2030,18 @@ void DrawFlagsTab() {
 
     static int16_t selectedScene = 0;
     if (selectedFlagSection == PERMANENT_SCENE_FLAGS || selectedFlagSection == CYCLE_SCENE_FLAGS) {
+#if !defined(__ANDROID__)
         ImGui::SameLine();
+#endif
         UIWidgets::ComboboxWithSearch("Scene", &selectedScene, &sceneList,
                                       {
                                           .alignment = UIWidgets::ComponentAlignment::Left,
                                           .labelPosition = UIWidgets::LabelPosition::None,
                                       });
         if (gPlayState != NULL) {
+#if !defined(__ANDROID__)
             ImGui::SameLine();
+#endif
             if (UIWidgets::Button("Current", UIWidgets::ButtonOptions{ { .color = UIWidgets::Colors::Gray } }.Size(
                                                  UIWidgets::Sizes::Inline))) {
                 selectedScene = gPlayState->sceneId;
@@ -1845,6 +2050,10 @@ void DrawFlagsTab() {
     }
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1.0f, 1.0f));
+#if defined(__ANDROID__)
+    // Match the gap after each flag grid before the first flag group.
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * 0.35f));
+#endif
     switch (selectedFlagSection) {
         case CURRENT_SCENE_FLAGS:
             if (gPlayState == NULL) {
@@ -1855,7 +2064,11 @@ void DrawFlagsTab() {
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("switches[0]");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##switches0",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gPlayState->actorCtx.sceneFlags.switches[0] = UINT32_MAX;
@@ -1865,13 +2078,19 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gPlayState->actorCtx.sceneFlags.switches[0] = 0;
             }
-            UIWidgets::DrawFlagArray32("##switches0", gPlayState->actorCtx.sceneFlags.switches[0]);
+            DrawEditorFlagArray32("##switches0", gPlayState->actorCtx.sceneFlags.switches[0]);
             ImGui::EndGroup();
+#if !defined(__ANDROID__)
             ImGui::SameLine(0, 10.0f);
+#endif
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("switches[1]");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##switches1",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gPlayState->actorCtx.sceneFlags.switches[1] = UINT32_MAX;
@@ -1881,12 +2100,16 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gPlayState->actorCtx.sceneFlags.switches[1] = 0;
             }
-            UIWidgets::DrawFlagArray32("##switches1", gPlayState->actorCtx.sceneFlags.switches[1]);
+            DrawEditorFlagArray32("##switches1", gPlayState->actorCtx.sceneFlags.switches[1]);
             ImGui::EndGroup();
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("switches[2]");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##switches2",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gPlayState->actorCtx.sceneFlags.switches[2] = UINT32_MAX;
@@ -1896,13 +2119,19 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gPlayState->actorCtx.sceneFlags.switches[2] = 0;
             }
-            UIWidgets::DrawFlagArray32("##switches2", gPlayState->actorCtx.sceneFlags.switches[2]);
+            DrawEditorFlagArray32("##switches2", gPlayState->actorCtx.sceneFlags.switches[2]);
             ImGui::EndGroup();
+#if !defined(__ANDROID__)
             ImGui::SameLine(0, 10.0f);
+#endif
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("switches[3]");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##switches3",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gPlayState->actorCtx.sceneFlags.switches[3] = UINT32_MAX;
@@ -1912,12 +2141,16 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gPlayState->actorCtx.sceneFlags.switches[3] = 0;
             }
-            UIWidgets::DrawFlagArray32("##switches3", gPlayState->actorCtx.sceneFlags.switches[3]);
+            DrawEditorFlagArray32("##switches3", gPlayState->actorCtx.sceneFlags.switches[3]);
             ImGui::EndGroup();
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("chest");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##chest",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gPlayState->actorCtx.sceneFlags.chest = UINT32_MAX;
@@ -1927,13 +2160,19 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gPlayState->actorCtx.sceneFlags.chest = 0;
             }
-            UIWidgets::DrawFlagArray32("##chest", gPlayState->actorCtx.sceneFlags.chest);
+            DrawEditorFlagArray32("##chest", gPlayState->actorCtx.sceneFlags.chest);
             ImGui::EndGroup();
+#if !defined(__ANDROID__)
             ImGui::SameLine(0, 10.0f);
+#endif
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("clearedRoom");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##clearedRoom",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gPlayState->actorCtx.sceneFlags.clearedRoom = UINT32_MAX;
@@ -1943,12 +2182,16 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gPlayState->actorCtx.sceneFlags.clearedRoom = 0;
             }
-            UIWidgets::DrawFlagArray32("##clearedRoom", gPlayState->actorCtx.sceneFlags.clearedRoom);
+            DrawEditorFlagArray32("##clearedRoom", gPlayState->actorCtx.sceneFlags.clearedRoom);
             ImGui::EndGroup();
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("clearedRoomTemp");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##clearedRoomTemp",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gPlayState->actorCtx.sceneFlags.clearedRoomTemp = UINT32_MAX;
@@ -1958,13 +2201,19 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gPlayState->actorCtx.sceneFlags.clearedRoomTemp = 0;
             }
-            UIWidgets::DrawFlagArray32("##clearedRoomTemp", gPlayState->actorCtx.sceneFlags.clearedRoomTemp);
+            DrawEditorFlagArray32("##clearedRoomTemp", gPlayState->actorCtx.sceneFlags.clearedRoomTemp);
             ImGui::EndGroup();
+#if !defined(__ANDROID__)
             ImGui::SameLine(0, 10.0f);
+#endif
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("collectible[0]");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##collectible0",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gPlayState->actorCtx.sceneFlags.collectible[0] = UINT32_MAX;
@@ -1974,12 +2223,16 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gPlayState->actorCtx.sceneFlags.collectible[0] = 0;
             }
-            UIWidgets::DrawFlagArray32("##collectible0", gPlayState->actorCtx.sceneFlags.collectible[0]);
+            DrawEditorFlagArray32("##collectible0", gPlayState->actorCtx.sceneFlags.collectible[0]);
             ImGui::EndGroup();
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("collectible[1]");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##collectible1",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gPlayState->actorCtx.sceneFlags.collectible[1] = UINT32_MAX;
@@ -1989,13 +2242,19 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gPlayState->actorCtx.sceneFlags.collectible[1] = 0;
             }
-            UIWidgets::DrawFlagArray32("##collectible1", gPlayState->actorCtx.sceneFlags.collectible[1]);
+            DrawEditorFlagArray32("##collectible1", gPlayState->actorCtx.sceneFlags.collectible[1]);
             ImGui::EndGroup();
+#if !defined(__ANDROID__)
             ImGui::SameLine(0, 10.0f);
+#endif
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("collectible[2]");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##collectible2",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gPlayState->actorCtx.sceneFlags.collectible[2] = UINT32_MAX;
@@ -2005,12 +2264,16 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gPlayState->actorCtx.sceneFlags.collectible[2] = 0;
             }
-            UIWidgets::DrawFlagArray32("##collectible2", gPlayState->actorCtx.sceneFlags.collectible[2]);
+            DrawEditorFlagArray32("##collectible2", gPlayState->actorCtx.sceneFlags.collectible[2]);
             ImGui::EndGroup();
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("collectible[3]");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##collectible3",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gPlayState->actorCtx.sceneFlags.collectible[3] = UINT32_MAX;
@@ -2020,7 +2283,7 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gPlayState->actorCtx.sceneFlags.collectible[3] = 0;
             }
-            UIWidgets::DrawFlagArray32("##collectible3", gPlayState->actorCtx.sceneFlags.collectible[3]);
+            DrawEditorFlagArray32("##collectible3", gPlayState->actorCtx.sceneFlags.collectible[3]);
             ImGui::EndGroup();
             break;
         case WEEK_EVENT_REG:
@@ -2058,7 +2321,7 @@ void DrawFlagsTab() {
             }
             for (int i = 0; i < 7; i++) {
                 ImGui::PushID(i);
-                UIWidgets::DrawFlagArray32("##", gSaveContext.save.saveInfo.scenesVisible[i]);
+                DrawEditorFlagArray32("##", gSaveContext.save.saveInfo.scenesVisible[i]);
                 ImGui::PopID();
             }
             break;
@@ -2079,7 +2342,11 @@ void DrawFlagsTab() {
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("chest");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##chest",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].chest = UINT32_MAX;
@@ -2089,13 +2356,19 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].chest = 0;
             }
-            UIWidgets::DrawFlagArray32("##chest", gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].chest);
+            DrawEditorFlagArray32("##chest", gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].chest);
             ImGui::EndGroup();
+#if !defined(__ANDROID__)
             ImGui::SameLine(0, 10.0f);
+#endif
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("switch0");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##switch0",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].switch0 = UINT32_MAX;
@@ -2105,13 +2378,17 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].switch0 = 0;
             }
-            UIWidgets::DrawFlagArray32("##switch0",
+            DrawEditorFlagArray32("##switch0",
                                        gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].switch0);
             ImGui::EndGroup();
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("collectible");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##collectible",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].collectible = UINT32_MAX;
@@ -2121,14 +2398,20 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].collectible = 0;
             }
-            UIWidgets::DrawFlagArray32("##collectible",
+            DrawEditorFlagArray32("##collectible",
                                        gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].collectible);
             ImGui::EndGroup();
+#if !defined(__ANDROID__)
             ImGui::SameLine(0, 10.0f);
+#endif
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("switch1");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##switch1",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].switch1 = UINT32_MAX;
@@ -2138,13 +2421,17 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].switch1 = 0;
             }
-            UIWidgets::DrawFlagArray32("##switch1",
+            DrawEditorFlagArray32("##switch1",
                                        gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].switch1);
             ImGui::EndGroup();
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("clearedRoom");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##clearedRoom",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].clearedRoom = UINT32_MAX;
@@ -2154,14 +2441,20 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].clearedRoom = 0;
             }
-            UIWidgets::DrawFlagArray32("##clearedRoom",
+            DrawEditorFlagArray32("##clearedRoom",
                                        gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].clearedRoom);
             ImGui::EndGroup();
+#if !defined(__ANDROID__)
             ImGui::SameLine(0, 10.0f);
+#endif
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("unk_14");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##unk_14",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].unk_14 = UINT32_MAX;
@@ -2171,13 +2464,17 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].unk_14 = 0;
             }
-            UIWidgets::DrawFlagArray32("##unk_14",
+            DrawEditorFlagArray32("##unk_14",
                                        gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].unk_14);
             ImGui::EndGroup();
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("rooms");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##rooms",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].rooms = UINT32_MAX;
@@ -2187,14 +2484,18 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].rooms = 0;
             }
-            UIWidgets::DrawFlagArray32("##rooms", gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].rooms);
+            DrawEditorFlagArray32("##rooms", gSaveContext.save.saveInfo.permanentSceneFlags[selectedScene].rooms);
             ImGui::EndGroup();
             break;
         case CYCLE_SCENE_FLAGS:
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("chest");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##chest",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.cycleSceneFlags[selectedScene].chest = UINT32_MAX;
@@ -2204,13 +2505,19 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.cycleSceneFlags[selectedScene].chest = 0;
             }
-            UIWidgets::DrawFlagArray32("##chest", gSaveContext.cycleSceneFlags[selectedScene].chest);
+            DrawEditorFlagArray32("##chest", gSaveContext.cycleSceneFlags[selectedScene].chest);
             ImGui::EndGroup();
+#if !defined(__ANDROID__)
             ImGui::SameLine(0, 10.0f);
+#endif
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("switch0");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##switch0",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.cycleSceneFlags[selectedScene].switch0 = UINT32_MAX;
@@ -2220,12 +2527,16 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.cycleSceneFlags[selectedScene].switch0 = 0;
             }
-            UIWidgets::DrawFlagArray32("##switch0", gSaveContext.cycleSceneFlags[selectedScene].switch0);
+            DrawEditorFlagArray32("##switch0", gSaveContext.cycleSceneFlags[selectedScene].switch0);
             ImGui::EndGroup();
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("collectible");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##collectible",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.cycleSceneFlags[selectedScene].collectible = UINT32_MAX;
@@ -2235,13 +2546,19 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.cycleSceneFlags[selectedScene].collectible = 0;
             }
-            UIWidgets::DrawFlagArray32("##collectible", gSaveContext.cycleSceneFlags[selectedScene].collectible);
+            DrawEditorFlagArray32("##collectible", gSaveContext.cycleSceneFlags[selectedScene].collectible);
             ImGui::EndGroup();
+#if !defined(__ANDROID__)
             ImGui::SameLine(0, 10.0f);
+#endif
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("switch1");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##switch1",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.cycleSceneFlags[selectedScene].switch1 = UINT32_MAX;
@@ -2251,12 +2568,16 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.cycleSceneFlags[selectedScene].switch1 = 0;
             }
-            UIWidgets::DrawFlagArray32("##switch1", gSaveContext.cycleSceneFlags[selectedScene].switch1);
+            DrawEditorFlagArray32("##switch1", gSaveContext.cycleSceneFlags[selectedScene].switch1);
             ImGui::EndGroup();
             ImGui::BeginGroup();
             ImGui::AlignTextToFramePadding();
             ImGui::Text("clearedRoom");
+#if defined(__ANDROID__)
+            AndroidFlagActionsSameLineIfFits();
+#else
             ImGui::SameLine(110);
+#endif
             if (UIWidgets::Button("All##clearedRoom",
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Gray })) {
                 gSaveContext.cycleSceneFlags[selectedScene].clearedRoom = UINT32_MAX;
@@ -2266,7 +2587,7 @@ void DrawFlagsTab() {
                                   { .size = UIWidgets::Sizes::Inline, .color = UIWidgets::Colors::Red })) {
                 gSaveContext.cycleSceneFlags[selectedScene].clearedRoom = 0;
             }
-            UIWidgets::DrawFlagArray32("##clearedRoom", gSaveContext.cycleSceneFlags[selectedScene].clearedRoom);
+            DrawEditorFlagArray32("##clearedRoom", gSaveContext.cycleSceneFlags[selectedScene].clearedRoom);
             ImGui::EndGroup();
             break;
         case RANDO_INF:
@@ -2341,7 +2662,11 @@ void DrawFlagsTab() {
             break;
     }
     ImGui::PopStyleVar();
+#if defined(__ANDROID__)
+    ImGui::EndGroup();
+#else
     ImGui::EndChild();
+#endif
     ImGui::PopStyleVar(2);
 }
 
@@ -2415,6 +2740,65 @@ void DrawRandoTab() {
 }
 
 void SaveEditorWindow::DrawElement() {
+#if defined(__ANDROID__)
+    // Reuse the same editor tabs without the fixed-width desktop tab strip.
+    // The selected index is independent of ImGui tab IDs and is kept on return.
+    static int selectedSection = 0;
+    static constexpr const char* sections[] = {
+        "General", "Items & Masks", "Quest Status", "Dungeon Items", "Reg Editor", "Flags", "Player", "Rando"
+    };
+    const int sectionCount = IS_RANDO ? 8 : 7;
+    if (selectedSection >= sectionCount) {
+        selectedSection = 0;
+    }
+    const int previousSection = selectedSection;
+
+    // Keep the section selector anchored at the top of the integrated menu.
+    // The content below scrolls inside its own child when necessary.
+    ImGui::SetScrollY(0.0f);
+    UIWidgets::PushStyleCombobox(UIWidgets::Colors(CVarGetInteger("gSettings.Menu.Theme", 5)));
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    if (ImGui::BeginCombo("##SaveEditorSection", sections[selectedSection])) {
+        for (int i = 0; i < sectionCount; ++i) {
+            if (ImGui::Selectable(sections[i], selectedSection == i)) {
+                selectedSection = i;
+            }
+            if (selectedSection == i) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    UIWidgets::PopStyleCombobox();
+
+    // General, Player and Rando already have a dedicated scrolling child.
+    // The other sections previously scrolled their parent window, which made
+    // this selector disappear. Provide the same layout for all sections without
+    // stacking another scrollbar on those three existing children.
+    const bool wrapContent = selectedSection >= 1 && selectedSection <= 5;
+    if (wrapContent) {
+        ImGui::BeginChild("SaveEditorMobileContent", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None,
+                          ImGuiWindowFlags_NoTitleBar);
+        if (previousSection != selectedSection) {
+            ImGui::SetScrollY(0.0f);
+        }
+    }
+
+    switch (selectedSection) {
+        case 0: DrawGeneralTab(); break;
+        case 1: DrawItemsAndMasksTab(); break;
+        case 2: DrawQuestStatusTab(); break;
+        case 3: DrawDungeonItemTab(); break;
+        case 4: DrawRegEditorTab(); break;
+        case 5: DrawFlagsTab(); break;
+        case 6: DrawPlayerTab(); break;
+        case 7: if (IS_RANDO) DrawRandoTab(); break;
+        default: break;
+    }
+    if (wrapContent) {
+        ImGui::EndChild();
+    }
+#else
     UIWidgets::PushStyleTabs(UIWidgets::Colors(CVarGetInteger("gSettings.Menu.Theme", 5)));
     if (ImGui::BeginTabBar("SaveContextTabBar", ImGuiTabBarFlags_NoCloseWithMiddleMouseButton)) {
         if (ImGui::BeginTabItem("General")) {
@@ -2467,6 +2851,7 @@ void SaveEditorWindow::DrawElement() {
         ImGui::EndTabBar();
     }
     UIWidgets::PopStyleTabs();
+#endif
 }
 
 void SaveEditorWindow::InitElement() {

@@ -381,10 +381,17 @@ ImVec2 GetItemImageSizeById(uint32_t itemId) {
 }
 
 void DrawOptions() {
-    if (ImGui::BeginTable("Options", 3)) {
+#if defined(__ANDROID__)
+    constexpr int optionColumns = 1;
+#else
+    constexpr int optionColumns = 3;
+#endif
+    if (ImGui::BeginTable("Options", optionColumns)) {
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+#if !defined(__ANDROID__)
         ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+#endif
 
         ImGui::TableNextColumn();
         UIWidgets::CVarCheckbox("Enable Time Splits", "gSettings.TimeSplits.Enable",
@@ -437,7 +444,9 @@ void DrawOptions() {
     UIWidgets::Tooltip("Enables Split Comparisons between lists, this will integrate within the Split List.");
 
     if (CVarGetInteger("gSettings.TimeSplits.Compare", 0)) {
+#if !defined(__ANDROID__)
         ImGui::SameLine();
+#endif
         UIWidgets::PushStyleCombobox(UIWidgets::Colors(CVarGetInteger("gSettings.Menu.Theme", 5)));
         ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
         if (ImGui::BeginCombo("##compareSplits", savedLists[comparedIndex].c_str())) {
@@ -456,9 +465,16 @@ void DrawOptions() {
 }
 
 void DrawActionButtons() {
-    if (ImGui::BeginTable("Action Buttons", 2)) {
+#if defined(__ANDROID__)
+    constexpr int actionColumns = 1;
+#else
+    constexpr int actionColumns = 2;
+#endif
+    if (ImGui::BeginTable("Action Buttons", actionColumns)) {
         ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+#if !defined(__ANDROID__)
         ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+#endif
 
         ImGui::TableNextColumn();
         UIWidgets::InputString("New List", &listInputName,
@@ -492,15 +508,22 @@ void DrawActionButtons() {
         UIWidgets::PopStyleCombobox();
 
         ImGui::TableNextColumn();
+#if defined(__ANDROID__)
+        const float saveButtonWidth = ImGui::GetContentRegionAvail().x;
+#else
+        const float saveButtonWidth = ImGui::GetContentRegionAvail().x * 0.5f;
+#endif
         if (UIWidgets::Button("Save Splits", {
-                                                 .size = { (ImGui::GetContentRegionAvail().x * 0.5f), 0 },
+                                                 .size = { saveButtonWidth, 0 },
                                                  .color = UIWidgets::Colors(CVarGetInteger("gSettings.Menu.Theme", 5)),
                                              })) {
             if (savedLists[0] != "Create a List First") {
                 SplitSaveFileAction(SPLIT_SAVE, savedLists[selectedIndex]);
             }
         }
+#if !defined(__ANDROID__)
         ImGui::SameLine();
+#endif
         if (UIWidgets::Button("Load Splits", {
                                                  .size = { (ImGui::GetContentRegionAvail().x), 0 },
                                                  .color = UIWidgets::Colors(CVarGetInteger("gSettings.Menu.Theme", 5)),
@@ -628,13 +651,20 @@ void TimesplitsSettingsWindow::DrawElement() {
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Split Entries")) {
-            if (ImGui::BeginTable("Split Settings", 3)) {
+#if defined(__ANDROID__)
+            constexpr int splitSettingsColumns = 1;
+#else
+            constexpr int splitSettingsColumns = 3;
+#endif
+            if (ImGui::BeginTable("Split Settings", splitSettingsColumns)) {
+#if !defined(__ANDROID__)
                 ImGui::TableSetupColumn("Preview",
                                         ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHeaderLabel, 88.0f);
                 ImGui::TableSetupColumn("Item Categories",
                                         ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHeaderLabel, 120.0f);
                 ImGui::TableSetupColumn("Item Grids",
                                         ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHeaderLabel);
+#endif
 
                 ImGui::TableNextColumn();
                 ImGui::BeginDisabled();
@@ -642,7 +672,12 @@ void TimesplitsSettingsWindow::DrawElement() {
                                                  .color = UIWidgets::Colors(CVarGetInteger("gSettings.Menu.Theme", 5)),
                                              });
                 ImGui::EndDisabled();
+#if defined(__ANDROID__)
+                // A bounded preview keeps the selector and item grid visible below it.
+                ImGui::BeginChild("Preview List", ImVec2(0, ImGui::GetFrameHeightWithSpacing() * 3.0f));
+#else
                 ImGui::BeginChild("Preview List");
+#endif
                 for (size_t i = 0; i < splitList.size(); i++) {
                     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ((ImGui::GetContentRegionAvail().x - 50.0f) * 0.5f));
                     ImGui::PushID(i);
@@ -672,6 +707,45 @@ void TimesplitsSettingsWindow::DrawElement() {
                 ImGui::EndChild();
 
                 ImGui::TableNextColumn();
+#if defined(__ANDROID__)
+                // Six desktop buttons in a 120px column become one readable selector.
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::BeginCombo("##SplitEntryCategory", listName)) {
+                    static const char* categories[] = {
+                        "Inventory", "Masks", "Songs", "Quest", "Bosses", "Entrances"
+                    };
+                    for (int i = 0; i < 6; ++i) {
+                        if (ImGui::Selectable(categories[i])) {
+                            listName = categories[i];
+                            switch (i) {
+                                case 0:
+                                    range = GetIndexRange((uint32_t)ITEM_OCARINA_OF_TIME, (uint32_t)ITEM_BOTTLE);
+                                    listColumns = 6;
+                                    break;
+                                case 1:
+                                    range = GetIndexRange((uint32_t)ITEM_MASK_POSTMAN, (uint32_t)ITEM_MASK_FIERCE_DEITY);
+                                    listColumns = 6;
+                                    break;
+                                case 2:
+                                    range = GetIndexRange((uint32_t)ITEM_SONG_TIME, (uint32_t)ITEM_SONG_OATH);
+                                    listColumns = 5;
+                                    break;
+                                case 3:
+                                    range = GetIndexRange((uint32_t)ITEM_REMAINS_ODOLWA, (uint32_t)ITEM_BOMBERS_NOTEBOOK);
+                                    listColumns = 4;
+                                    break;
+                                case 4:
+                                    range = GetIndexRange((uint32_t)SPLIT_KILLED_ODOLWA, (uint32_t)SPLIT_KILLED_MAJORA);
+                                    listColumns = 1;
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+#else
                 if (UIWidgets::Button("Inventory",
                                       {
                                           .color = UIWidgets::Colors(CVarGetInteger("gSettings.Menu.Theme", 5)),
@@ -718,6 +792,7 @@ void TimesplitsSettingsWindow::DrawElement() {
                                       })) {
                     listName = "Entrances";
                 }
+#endif
                 ImGui::TableNextColumn();
                 if (listName != "Entrances") {
                     DrawItemList(listName, range, listColumns);

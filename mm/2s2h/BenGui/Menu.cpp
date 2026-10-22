@@ -71,56 +71,88 @@ uint32_t GetVectorIndexOf(std::vector<std::string>& vector, std::string value) {
 }
 
 #if defined(__ANDROID__)
-// Android touch events reach ImGui as mouse events. Convert a vertical finger
-// drag into scrolling of the child window where the gesture began.
+// Mobile drag-scroll is resolved once after all child windows have been drawn.
+// This also covers widgets drawing their own nested BeginChild() windows.
 static constexpr float kAndroidMenuDragThreshold = 18.0f;
-
-static void AndroidMenuScrollChild(bool isSidebar) {
+static void AndroidMenuScrollWindowTree(ImGuiWindow* menuRoot) {
     ImGuiIO& io = ImGui::GetIO();
+    ImGuiContext& g = *GImGui;
     constexpr int button = ImGuiMouseButton_Left;
-    if (!io.MouseDown[button] ||
-        !ImGui::IsMouseDragging(button, kAndroidMenuDragThreshold) ||
-        ImGui::GetScrollMaxY() <= 0.0f) {
+    static ImGuiID targetWindowId = 0;
+    static bool directionDecided = false;
+    static bool verticalGesture = false;
+
+    if (!io.MouseDown[button]) {
+        targetWindowId = 0;
+        directionDecided = false;
+        verticalGesture = false;
         return;
     }
 
-    const ImVec2 start = io.MouseClickedPos[button];
-    const ImVec2 position = ImGui::GetWindowPos();
-    const ImVec2 size = ImGui::GetWindowSize();
-    if (start.x < position.x || start.x >= position.x + size.x ||
-        start.y < position.y || start.y >= position.y + size.y) {
-        return;
-    }
-    // Let the existing ImGui scrollbar remain directly draggable.
-    if (start.x >= position.x + size.x - ImGui::GetStyle().ScrollbarSize) {
-        return;
-    }
-
-    const ImVec2 drag = io.MousePos - start;
-    if (drag.y * drag.y <= drag.x * drag.x) {
-        return; // Ignore horizontal gestures (e.g. adjusting a slider).
-    }
-
-    if (!isSidebar) {
-        // A slider, checkbox, combo or other active control must keep its drag.
-        // Checking the active item's window also avoids blocking scrolling just
-        // because the search field in a DIFFERENT child still has keyboard focus.
-        const ImGuiWindow* current = ImGui::GetCurrentWindow();
-        const ImGuiWindow* active = GImGui->ActiveIdWindow;
-        // ImGui also activates a window's MoveId on an empty-space click,
-        // even when NoMove prevents the window from moving. That isn't a
-        // widget interaction and must not suppress touch scrolling.
-        if (active != nullptr && GImGui->ActiveId != active->MoveId) {
-            while (active != nullptr) {
-                if (active == current) {
-                    return;
-                }
-                active = active->ParentWindow;
+    if (io.MouseClicked[button]) {
+        targetWindowId = 0;
+        directionDecided = false;
+        verticalGesture = false;
+        const ImVec2 origin = io.MouseClickedPos[button];
+        int bestDepth = -1;
+        // A child window can be scrollable even when its parent isn't.
+        for (ImGuiWindow* candidate : g.Windows) {
+            if (!candidate->Active || candidate->ScrollMax.y <= 0.0f ||
+                (candidate->Flags & ImGuiWindowFlags_NoMouseInputs) ||
+                !candidate->ClipRect.Contains(origin) ||
+                !ImRect(candidate->Pos, candidate->Pos + candidate->Size).Contains(origin)) {
+                continue;
+            }
+            int depth = 0;
+            ImGuiWindow* parent = candidate;
+            while (parent != nullptr && parent != menuRoot) {
+                parent = parent->ParentWindow;
+                depth++;
+            }
+            if (parent == menuRoot && depth > bestDepth) {
+                targetWindowId = candidate->ID;
+                bestDepth = depth;
+            }
+        }
+        if (ImGuiWindow* target = ImGui::FindWindowByID(targetWindowId)) {
+            // Preserve the native drag behavior of scrollbar handles.
+            if (target->ScrollbarY &&
+                origin.x >= target->Pos.x + target->Size.x - ImGui::GetStyle().ScrollbarSize) {
+                targetWindowId = 0;
             }
         }
     }
 
-    ImGui::SetScrollY(ImGui::GetScrollY() - io.MouseDelta.y);
+    if (targetWindowId == 0) {
+        return;
+    }
+    const ImVec2 travel = io.MousePos - io.MouseClickedPos[button];
+    if (!directionDecided &&
+        travel.x * travel.x + travel.y * travel.y >=
+            kAndroidMenuDragThreshold * kAndroidMenuDragThreshold) {
+        directionDecided = true;
+        verticalGesture = (travel.y * travel.y > travel.x * travel.x);
+    }
+    if (!directionDecided || !verticalGesture) {
+        return;
+    }
+
+    ImGuiWindow* target = ImGui::FindWindowByID(targetWindowId);
+    if (target == nullptr || !target->Active) {
+        return;
+    }
+    // Don't steal gestures from sliders or other active widgets. Sidebar
+    // entries are special: their click-on-release is cancelled after a swipe.
+    const bool sidebar = std::string(target->Name).find(" Section") != std::string::npos;
+    if (!sidebar && g.ActiveId != 0 && g.ActiveIdWindow != nullptr &&
+        g.ActiveId != g.ActiveIdWindow->MoveId) {
+        for (const ImGuiWindow* active = g.ActiveIdWindow; active != nullptr; active = active->ParentWindow) {
+            if (active == target) {
+                return;
+            }
+        }
+    }
+    ImGui::SetScrollY(target, target->Scroll.y - io.MouseDelta.y);
 }
 #endif
 
@@ -315,6 +347,54 @@ std::unordered_map<uint32_t, disabledInfo>& Menu::GetDisabledMap() {
     return disabledMap;
 }
 
+#if defined(__ANDROID__)
+// Wrap checkbox labels using the actual rendered width, not the desktop
+// section's historical character-count limit. Explicit newlines are kept.
+static std::string AndroidWrapCheckboxLabel(const std::string& label) {
+    const size_t idOffset = label.find("##");
+    const std::string visible = label.substr(0, idOffset);
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float available = ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() -
+                            style.ItemInnerSpacing.x * 2.0f - style.FramePadding.x * 2.0f;
+    if (available <= ImGui::GetFontSize() * 3.0f ||
+        (visible.find('\n') == std::string::npos && ImGui::CalcTextSize(visible.c_str()).x <= available)) {
+        return label;
+    }
+
+    std::string wrapped;
+    std::string line;
+    std::string word;
+    // Wrap at word boundaries; never split a word just to meet a character limit.
+    // The source's intentional newline characters remain hard line breaks.
+    for (size_t i = 0; i <= visible.size(); ++i) {
+        const char ch = i < visible.size() ? visible[i] : '\0';
+        if (ch == ' ' || ch == '\n' || ch == '\0') {
+            if (!word.empty()) {
+                const std::string candidate = line.empty() ? word : line + " " + word;
+                if (!line.empty() && ImGui::CalcTextSize(candidate.c_str()).x > available) {
+                    wrapped += line + "\n";
+                    line = word;
+                } else {
+                    line = candidate;
+                }
+                word.clear();
+            }
+            if (ch == '\n') {
+                wrapped += line + "\n";
+                line.clear();
+            }
+        } else {
+            word += ch;
+        }
+    }
+    wrapped += line;
+    if (idOffset != std::string::npos) {
+        wrapped += label.substr(idOffset); // Keep the original ImGui widget ID.
+    }
+    return wrapped;
+}
+#endif
+
 void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors menuThemeIndex) {
     disabledTempTooltip = "This setting is disabled because: \n\n";
     disabledValue = false;
@@ -350,18 +430,31 @@ void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors me
                 }
                 auto options = std::static_pointer_cast<UIWidgets::CheckboxOptions>(widget.options);
                 options->color = menuThemeIndex;
-                if (UIWidgets::Checkbox(UIWidgets::WrappedText(widget.name.c_str(), width).c_str(), pointer,
-                                        *options)) {
+#if defined(__ANDROID__)
+                const std::string label = AndroidWrapCheckboxLabel(widget.name);
+#else
+                const std::string label = UIWidgets::WrappedText(widget.name.c_str(), width);
+#endif
+                if (UIWidgets::Checkbox(label.c_str(), pointer, *options)) {
                     if (widget.callback != nullptr) {
                         widget.callback(widget);
                     }
                 }
             } break;
             case WIDGET_CVAR_CHECKBOX: {
+#if defined(__ANDROID__)
+                if (widget.name == "Popout Menu") {
+                    break;
+                }
+#endif
                 auto options = std::static_pointer_cast<UIWidgets::CheckboxOptions>(widget.options);
                 options->color = menuThemeIndex;
-                if (UIWidgets::CVarCheckbox(UIWidgets::WrappedText(widget.name.c_str(), width).c_str(), widget.cVar,
-                                            *options)) {
+#if defined(__ANDROID__)
+                const std::string label = AndroidWrapCheckboxLabel(widget.name);
+#else
+                const std::string label = UIWidgets::WrappedText(widget.name.c_str(), width);
+#endif
+                if (UIWidgets::CVarCheckbox(label.c_str(), widget.cVar, *options)) {
                     if (widget.callback != nullptr) {
                         widget.callback(widget);
                     }
@@ -546,7 +639,21 @@ void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors me
                 options->color = menuThemeIndex;
                 UIWidgets::WindowButton(widget.name.c_str(), widget.cVar, window, *options);
                 if (!window->IsVisible()) {
+#if defined(__ANDROID__)
+                    // The integrated Mod Menu may use ordinary ImGui::Text(),
+                    // which otherwise clips long descriptions at the right edge.
+                    // Scope wrapping to this window to preserve all other menus.
+                    const bool wrapModMenuText = std::string(widget.windowName) == "Mod Menu";
+                    if (wrapModMenuText) {
+                        ImGui::PushTextWrapPos(0.0f);
+                    }
+#endif
                     window->DrawElement();
+#if defined(__ANDROID__)
+                    if (wrapModMenuText) {
+                        ImGui::PopTextWrapPos();
+                    }
+#endif
                 }
             } break;
             case WIDGET_SEARCH: {
@@ -612,7 +719,11 @@ void Menu::DrawElement() {
     windowHeight = ImGui::GetMainViewport()->WorkSize.y;
     windowWidth = ImGui::GetMainViewport()->WorkSize.x;
     auto windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
+#if defined(__ANDROID__)
+    const bool popout = false; // Mobile menu stays fullscreen; no detached menu window.
+#else
     bool popout = CVarGetInteger("gSettings.Menu.Popout", 0) && allowPopout;
+#endif
     if (popout) {
         windowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoDocking;
     }
@@ -939,9 +1050,6 @@ void Menu::DrawElement() {
             sectionIndex = nextIndex;
         }
     }
-#if defined(__ANDROID__)
-    AndroidMenuScrollChild(true);
-#endif
     ImGui::EndChild();
 
 #if defined(__ANDROID__)
@@ -992,9 +1100,6 @@ void Menu::DrawElement() {
             menuSearch.Clear();
         }
 
-#if defined(__ANDROID__)
-        AndroidMenuScrollChild(false); // Nested Search Results child.
-#endif
         ImGui::EndChild();
     } else {
         std::string menuLabel = menuEntries.at(headerIndex).label;
@@ -1025,9 +1130,6 @@ void Menu::DrawElement() {
         }
     }
     if (!useColumns || menuSearchText.length() > 0) {
-#if defined(__ANDROID__)
-        AndroidMenuScrollChild(false);
-#endif
         ImGui::EndChild();
     }
     ImGui::PopFont();
@@ -1044,6 +1146,9 @@ void Menu::DrawElement() {
     if (freshOpen) {
         freshOpen = false;
     }
+#if defined(__ANDROID__)
+    AndroidMenuScrollWindowTree(window);
+#endif
     ImGui::End();
 }
 } // namespace Ship

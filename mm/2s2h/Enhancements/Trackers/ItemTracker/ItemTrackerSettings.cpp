@@ -119,10 +119,28 @@ struct DragDropPayload {
 void DrawItemTrackerGroupPreview(TrackerGroup& group, bool addMode, int groupIndex) {
     static std::pair<TrackerItemType, u32> selectedItem = { TRACKER_ITEM_RANDO, 0 };
 
-    if (ImGui::BeginChild(group.name.c_str(), ImVec2(0, 0),
-                          ImGuiChildFlags_AlwaysAutoResize | ImGuiChildFlags_AutoResizeX |
-                              ImGuiChildFlags_AutoResizeY)) {
+#if defined(__ANDROID__)
+    // AutoResizeX shrinks the child around the icons and clips large counters
+    // such as 30/30 and 15/15. Use all available width and content-driven height.
+    constexpr ImGuiChildFlags previewFlags = ImGuiChildFlags_AlwaysAutoResize | ImGuiChildFlags_AutoResizeY;
+#else
+    constexpr ImGuiChildFlags previewFlags = ImGuiChildFlags_AlwaysAutoResize |
+                                             ImGuiChildFlags_AutoResizeX | ImGuiChildFlags_AutoResizeY;
+#endif
+    if (ImGui::BeginChild(group.name.c_str(), ImVec2(0, 0), previewFlags)) {
+#if defined(__ANDROID__)
+        const float minCellWidth = ImGui::CalcTextSize("999/999").x + ImGui::GetFrameHeight() +
+                                   ImGui::GetStyle().ItemSpacing.x * 2.0f;
+        const int columnsThatFit = std::max(1, static_cast<int>(ImGui::GetContentRegionAvail().x / minCellWidth));
+        const int columns = std::max(1, std::min(static_cast<int>(group.columns), columnsThatFit));
+        const bool tableOpen = ImGui::BeginTable(group.name.c_str(), columns, ImGuiTableFlags_SizingFixedFit);
+        if (tableOpen) {
+            for (int column = 0; column < columns; ++column) {
+                ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, minCellWidth);
+            }
+#else
         if (ImGui::BeginTable(group.name.c_str(), group.columns)) {
+#endif
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
 
@@ -534,7 +552,12 @@ void LoadItemTrackerConfig() {
 }
 
 void DrawTrackerOptions() {
-    if (ImGui::BeginTable("OptionsTable", 3)) {
+#if defined(__ANDROID__)
+    constexpr int optionsColumns = 1;
+#else
+    constexpr int optionsColumns = 3;
+#endif
+    if (ImGui::BeginTable("OptionsTable", optionsColumns)) {
         ImGui::TableNextColumn();
         if (CVarGetInteger("gWindows.ItemTracker", 0)) {
             UIWidgets::WindowButton("Disable Item Tracker", "gWindows.ItemTracker", BenGui::mItemTrackerWindow,
@@ -595,14 +618,25 @@ void DrawTrackerOptions() {
                                        .Step(0.1f)
                                        .Color(WIDGET_COLOR));
         static std::string trackerInputName;
+#if defined(__ANDROID__)
+        const float groupNameWidth = ImGui::GetContentRegionAvail().x;
+#else
+        const float groupNameWidth = ImGui::GetContentRegionAvail().x - 45.0f;
+#endif
         UIWidgets::InputString("##Group Name", &trackerInputName,
                                UIWidgets::InputOptions()
                                    .LabelPosition(UIWidgets::LabelPosition::None)
                                    .Color(WIDGET_COLOR)
                                    .PlaceholderText("Enter new group name")
-                                   .Size({ ImGui::GetContentRegionAvail().x - 45.0f, 0 }));
+                                   .Size({ groupNameWidth, 0 }));
+#if defined(__ANDROID__)
+        // Put the add action on its own line; the desktop 45px reserve is too
+        // narrow once Android touch targets have been scaled up.
+        if (UIWidgets::Button("Add Group", { .color = UIWidgets::Colors::Green })) {
+#else
         ImGui::SameLine();
         if (UIWidgets::Button(ICON_FA_PLUS, { .color = UIWidgets::Colors::Green })) {
+#endif
             itemTrackerGroups.push_back(TrackerGroup{
                 .name = trackerInputName.c_str(),
                 .columns = 6,
@@ -617,7 +651,9 @@ void DrawTrackerOptions() {
 }
 
 void DrawTrackerAvailableGroups() {
+#if !defined(__ANDROID__)
     if (ImGui::BeginChild("Available Groups")) {
+#endif
         int groupIndex = 0;
         for (auto& group : itemTrackerGroupsAvailable) {
             ImGui::PushID(groupIndex);
@@ -631,12 +667,16 @@ void DrawTrackerAvailableGroups() {
             ImGui::PopID();
             groupIndex++;
         }
+#if !defined(__ANDROID__)
     }
     ImGui::EndChild();
+#endif
 }
 
 void DrawTrackerActiveGroups() {
+#if !defined(__ANDROID__)
     if (ImGui::BeginChild("Active Groups")) {
+#endif
         int groupIndex = 0;
         for (auto& group : itemTrackerGroups) {
             ImGui::PushID(groupIndex);
@@ -673,8 +713,10 @@ void DrawTrackerActiveGroups() {
             ImGui::PopID();
             groupIndex++;
         }
+#if !defined(__ANDROID__)
     }
     ImGui::EndChild();
+#endif
 }
 
 void ItemTrackerSettingsWindow::DrawElement() {
@@ -683,6 +725,21 @@ void ItemTrackerSettingsWindow::DrawElement() {
         DrawTrackerOptions();
 
         UIWidgets::PushStyleTabs(WIDGET_COLOR);
+#if defined(__ANDROID__)
+        // The parent "Item Tracker Settings" child is the only Android
+        // scrolling region. Group lists participate in its content height.
+        if (ImGui::BeginTabBar("TrackerMobileTabs")) {
+            if (ImGui::BeginTabItem("Available Groups")) {
+                DrawTrackerAvailableGroups();
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Active Groups")) {
+                DrawTrackerActiveGroups();
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
+#else
         if (ImGui::BeginTable("TrackerTabs", 2)) {
             ImGui::TableNextColumn();
             if (ImGui::BeginChild("TrackerChild")) {
@@ -709,6 +766,7 @@ void ItemTrackerSettingsWindow::DrawElement() {
             ImGui::EndChild();
             ImGui::EndTable();
         }
+#endif
         UIWidgets::PopStyleTabs();
     }
     ImGui::EndChild();

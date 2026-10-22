@@ -261,7 +261,9 @@ void EventLogWindow::DrawElement() {
         RegisterEventLogHooks();
     }
 
+#if !defined(__ANDROID__)
     ImGui::SameLine();
+#endif
 
     if (UIWidgets::Button("Filters", UIWidgets::ButtonOptions{}.Size(UIWidgets::Sizes::Inline))) {
         ImGui::OpenPopup("eventLogFiltersPopup");
@@ -328,15 +330,23 @@ void EventLogWindow::DrawElement() {
         ImGui::EndPopup();
     }
 
+#if !defined(__ANDROID__)
     ImGui::SameLine(0);
+#endif
 
     std::string maxEntriesStr = std::string("Max Entries: ") + std::to_string(eventLogEntries.size()) + "/";
     ImGui::Text("%s", maxEntriesStr.c_str());
 
+#if !defined(__ANDROID__)
     ImGui::SameLine(0);
+#endif
 
     UIWidgets::PushStyleCombobox();
+#if defined(__ANDROID__)
+    ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
+#else
     ImGui::PushItemWidth(50);
+#endif
     s32 maxEntries = CVarGetInteger("gEventLog.MaxEntries", 1000);
     if (ImGui::InputScalar("##maxEntriesInput", ImGuiDataType_S32, &maxEntries)) {
         CVarSetInteger("gEventLog.MaxEntries", MAX(0, maxEntries));
@@ -346,7 +356,9 @@ void EventLogWindow::DrawElement() {
     ImGui::PopItemWidth();
     UIWidgets::PopStyleCombobox();
 
+#if !defined(__ANDROID__)
     ImGui::SameLine(0);
+#endif
 
     if (UIWidgets::Button("Clear",
                           UIWidgets::ButtonOptions{ .color = UIWidgets::Colors::Red }.Size(UIWidgets::Sizes::Inline))) {
@@ -354,8 +366,17 @@ void EventLogWindow::DrawElement() {
     }
 
     if (ImGui::BeginTable("events", 3, ImGuiTableFlags_ScrollY, ImVec2(0, 0))) {
+#if defined(__ANDROID__)
+        // The 70px and 100px desktop widths truncate headers at Android scale.
+        const float cellPad = ImGui::GetStyle().CellPadding.x * 2.0f + 8.0f;
+        ImGui::TableSetupColumn("Timestamp", ImGuiTableColumnFlags_WidthFixed,
+                                ImGui::CalcTextSize("Timestamp").x + cellPad);
+        ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed,
+                                ImGui::CalcTextSize("SceneFlagUnset").x + cellPad);
+#else
         ImGui::TableSetupColumn("Timestamp", ImGuiTableColumnFlags_WidthFixed, 70);
         ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 100);
+#endif
         ImGui::TableSetupColumn("Meta", ImGuiTableColumnFlags_WidthStretch, 0);
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableHeadersRow();

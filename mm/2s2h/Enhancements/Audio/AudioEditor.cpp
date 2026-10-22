@@ -414,7 +414,9 @@ void Draw_SfxTab(const std::string& tabId, SeqType type) {
             ReplayCurrentBGM();
         }
     }
+#if !defined(__ANDROID__)
     ImGui::SameLine();
+#endif
     if (ImGui::Button(randomizeAllButton.c_str())) {
         auto currentBGM = AudioSeq_GetActiveSeqId(SEQ_PLAYER_BGM_MAIN);
         auto prevReplacement = AudioCollection::Instance->GetReplacementSequence(currentBGM);
@@ -425,7 +427,9 @@ void Draw_SfxTab(const std::string& tabId, SeqType type) {
             ReplayCurrentBGM();
         }
     }
+#if !defined(__ANDROID__)
     ImGui::SameLine();
+#endif
     if (ImGui::Button(lockAllButton.c_str())) {
         auto currentBGM = AudioSeq_GetActiveSeqId(SEQ_PLAYER_BGM_MAIN);
         auto prevReplacement = AudioCollection::Instance->GetReplacementSequence(currentBGM);
@@ -436,7 +440,9 @@ void Draw_SfxTab(const std::string& tabId, SeqType type) {
             ReplayCurrentBGM();
         }
     }
+#if !defined(__ANDROID__)
     ImGui::SameLine();
+#endif
     if (ImGui::Button(unlockAllButton.c_str())) {
         auto currentBGM = AudioSeq_GetActiveSeqId(SEQ_PLAYER_BGM_MAIN);
         auto prevReplacement = AudioCollection::Instance->GetReplacementSequence(currentBGM);
@@ -449,10 +455,15 @@ void Draw_SfxTab(const std::string& tabId, SeqType type) {
     }
     UIWidgets::PopStyleButton();
 
+#if defined(__ANDROID__)
+    ImGui::BeginTable(tabId.c_str(), 1, ImGuiTableFlags_SizingStretchSame);
+    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+#else
     ImGui::BeginTable(tabId.c_str(), 3, ImGuiTableFlags_SizingFixedFit);
     ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
+#endif
     // Cache valid replacements for this group
     std::unordered_map<u16, const char*> baseFilteredMap;
     for (const auto& [value, seqData] : map) {
@@ -658,7 +669,12 @@ void AudioEditor::InitElement() {
 void AudioEditor::DrawElement() {
     AudioCollection::Instance->InitializeShufflePool();
 
-    ImGui::BeginTable("##TopButtons", 4, ImGuiTableFlags_SizingStretchSame);
+#if defined(__ANDROID__)
+    constexpr int globalAudioActionColumns = 1;
+#else
+    constexpr int globalAudioActionColumns = 4;
+#endif
+    ImGui::BeginTable("##TopButtons", globalAudioActionColumns, ImGuiTableFlags_SizingStretchSame);
     ImGui::TableNextColumn();
     UIWidgets::PushStyleButton(THEME_COLOR);
     if (ImGui::Button("Randomize All Groups", ImVec2(-FLT_MIN, 0))) {
@@ -684,16 +700,45 @@ void AudioEditor::DrawElement() {
     ImGui::EndTable();
 
     UIWidgets::PushStyleTabs(THEME_COLOR);
-    if (ImGui::BeginTabBar("SfxContextTabBar", ImGuiTabBarFlags_NoCloseWithMiddleMouseButton)) {
+#if defined(__ANDROID__)
+    static int mobileAudioSection = 0;
+    static const char* audioSections[] = {
+        "Audio Options", "Background Music", "Fanfares", "Events", "Battle Music",
+        "Ocarina", "Instrument", "Songs", "Audio Shuffle Pool Management"
+    };
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::BeginCombo("##AudioEditorSection", audioSections[mobileAudioSection])) {
+        for (int i = 0; i < 9; ++i) {
+            if (ImGui::Selectable(audioSections[i], mobileAudioSection == i)) {
+                mobileAudioSection = i;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    const bool audioSectionsOpen = true;
+    const auto beginAudioSection = [&](const char*, int index) { return mobileAudioSection == index; };
+    const auto endAudioSection = []() {};
+#else
+    const bool audioSectionsOpen = ImGui::BeginTabBar("SfxContextTabBar", ImGuiTabBarFlags_NoCloseWithMiddleMouseButton);
+    const auto beginAudioSection = [](const char* name, int) { return ImGui::BeginTabItem(name); };
+    const auto endAudioSection = []() { ImGui::EndTabItem(); };
+#endif
+    if (audioSectionsOpen) {
         static ImVec2 cellPadding(8.0f, 8.0f);
-        if (ImGui::BeginTabItem("Audio Options")) {
+        if (beginAudioSection("Audio Options", 0)) {
             ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, cellPadding);
             ImGui::BeginTable("Audio Options", 1, ImGuiTableFlags_SizingStretchSame);
             ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
 
-            if (ImGui::BeginChild("SfxOptions", ImVec2(0, -8))) {
+#if defined(__ANDROID__)
+            // Let the main menu child own vertical scrolling on touch devices.
+            const bool drawAudioOptions = true;
+#else
+            const bool drawAudioOptions = ImGui::BeginChild("SfxOptions", ImVec2(0, -8));
+#endif
+            if (drawAudioOptions) {
                 BenGui::mBenMenu->MenuDrawItem(lowHpAlarm, ImGui::GetContentRegionAvail().x, THEME_COLOR);
                 BenGui::mBenMenu->MenuDrawItem(muteCarpenterSfx, ImGui::GetContentRegionAvail().x, THEME_COLOR);
                 BenGui::mBenMenu->MenuDrawItem(childGoronCry, ImGui::GetContentRegionAvail().x, THEME_COLOR);
@@ -707,38 +752,40 @@ void AudioEditor::DrawElement() {
                 BenGui::mBenMenu->MenuDrawItem(voicePitchEnable, ImGui::GetContentRegionAvail().x, THEME_COLOR);
                 BenGui::mBenMenu->MenuDrawItem(voicePitch, ImGui::GetContentRegionAvail().x, THEME_COLOR);
             }
+#if !defined(__ANDROID__)
             ImGui::EndChild();
+#endif
             ImGui::EndTable();
             ImGui::PopStyleVar(1);
-            ImGui::EndTabItem();
+            endAudioSection();
         }
-        if (ImGui::BeginTabItem("Background Music")) {
+        if (beginAudioSection("Background Music", 1)) {
             Draw_SfxTab("backgroundMusic", SEQ_BGM_WORLD);
-            ImGui::EndTabItem();
+            endAudioSection();
         }
-        if (ImGui::BeginTabItem("Fanfares")) {
+        if (beginAudioSection("Fanfares", 2)) {
             Draw_SfxTab("fanfares", SEQ_FANFARE);
-            ImGui::EndTabItem();
+            endAudioSection();
         }
-        if (ImGui::BeginTabItem("Events")) {
+        if (beginAudioSection("Events", 3)) {
             Draw_SfxTab("event", SEQ_BGM_EVENT);
-            ImGui::EndTabItem();
+            endAudioSection();
         }
-        if (ImGui::BeginTabItem("Battle Music")) {
+        if (beginAudioSection("Battle Music", 4)) {
             Draw_SfxTab("battleMusic", SEQ_BGM_BATTLE);
-            ImGui::EndTabItem();
+            endAudioSection();
         }
-        if (ImGui::BeginTabItem("Ocarina")) {
+        if (beginAudioSection("Ocarina", 5)) {
             Draw_SfxTab("ocarina", SEQ_OCARINA);
-            ImGui::EndTabItem();
+            endAudioSection();
         }
-        if (ImGui::BeginTabItem("Instrument")) {
+        if (beginAudioSection("Instrument", 6)) {
             Draw_SfxTab("instrument", SEQ_INSTRUMENT);
-            ImGui::EndTabItem();
+            endAudioSection();
         }
-        if (ImGui::BeginTabItem("Songs")) {
+        if (beginAudioSection("Songs", 7)) {
             Draw_SfxTab("songs", SEQ_BGM_SONGS);
-            ImGui::EndTabItem();
+            endAudioSection();
         }
 #if 0
         if (ImGui::BeginTabItem("Sound Effects")) {
@@ -751,7 +798,7 @@ void AudioEditor::DrawElement() {
 #endif
 
         static bool excludeTabOpen = false;
-        if (ImGui::BeginTabItem("Audio Shuffle Pool Management")) {
+        if (beginAudioSection("Audio Shuffle Pool Management", 8)) {
             ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, cellPadding);
             if (!excludeTabOpen) {
                 excludeTabOpen = true;
@@ -907,12 +954,14 @@ void AudioEditor::DrawElement() {
                 ImGui::EndTable();
             }
             ImGui::PopStyleVar(1);
-            ImGui::EndTabItem();
+            endAudioSection();
         } else {
             excludeTabOpen = false;
         }
 
+#if !defined(__ANDROID__)
         ImGui::EndTabBar();
+#endif
     }
 
     UIWidgets::PopStyleTabs();
