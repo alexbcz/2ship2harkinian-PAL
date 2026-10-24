@@ -141,14 +141,20 @@ static void AndroidMenuScrollWindowTree(ImGuiWindow* menuRoot) {
     if (target == nullptr || !target->Active) {
         return;
     }
-    // Don't steal gestures from sliders or other active widgets. Sidebar
-    // entries are special: their click-on-release is cancelled after a swipe.
+    // A confirmed vertical swipe should scroll even when it began on a slider
+    // or another active widget. Horizontal gestures still belong to widgets.
+    // Sidebar entries already allow scrolling without releasing their active ID.
     const bool sidebar = std::string(target->Name).find(" Section") != std::string::npos;
     if (!sidebar && g.ActiveId != 0 && g.ActiveIdWindow != nullptr &&
         g.ActiveId != g.ActiveIdWindow->MoveId) {
         for (const ImGuiWindow* active = g.ActiveIdWindow; active != nullptr; active = active->ParentWindow) {
             if (active == target) {
-                return;
+                // Preserve intentional drag-and-drop, e.g. rearranging tracker items.
+                if (g.DragDropActive) {
+                    return;
+                }
+                ImGui::ClearActiveID();
+                break;
             }
         }
     }
