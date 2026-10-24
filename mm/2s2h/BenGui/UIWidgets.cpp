@@ -482,6 +482,26 @@ bool Checkbox(const char* _label, bool* value, const CheckboxOptions& options) {
     }
     bool hovered, held, pressed;
     pressed = ImGui::ButtonBehavior(total_bb, id, &hovered, &held);
+#if defined(__ANDROID__)
+    // Android touches are mouse events. A vertical swipe that begins over a
+    // checkbox should release its active ID so the menu can scroll instead.
+    // Match the drag threshold used by AndroidMenuScrollWindowTree in Menu.cpp.
+    constexpr float kAndroidTouchScrollThreshold = 18.0f;
+    constexpr float kThresholdSquared = kAndroidTouchScrollThreshold * kAndroidTouchScrollThreshold;
+    const ImGuiIO& io = ImGui::GetIO();
+    const ImVec2 drag = io.MousePos - io.MouseClickedPos[ImGuiMouseButton_Left];
+    const bool verticalSwipe = io.MouseDown[ImGuiMouseButton_Left] &&
+                               drag.x * drag.x + drag.y * drag.y >= kThresholdSquared &&
+                               drag.y * drag.y > drag.x * drag.x;
+    if (verticalSwipe && g.ActiveId == id) {
+        ImGui::ClearActiveID();
+        held = false;
+    }
+    // Do not toggle if a drag moves away and then ends back on the checkbox.
+    if (pressed && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] > kThresholdSquared) {
+        pressed = false;
+    }
+#endif
     if (pressed) {
         *value = !(*value);
         ImGui::MarkItemEdited(id);
