@@ -712,8 +712,25 @@ void BenMenu::AddSettings() {
                 .DefaultValue(1));
 #endif
 
+    // Touch interactions don't have a meaningful hover state. The long FPS
+    // tooltip otherwise appears over the slider itself on Android.
+#if defined(__ANDROID__)
+    constexpr const char* fpsTooltip = "";
+    constexpr int fpsSliderMax = 120;
+#else
+    constexpr const char* fpsTooltip =
+        "Uses Matrix Interpolation to create extra frames, resulting in smoother graphics. "
+        "This is purely visual and does not impact game logic, execution of glitches etc.\n\n"
+        "A higher target FPS than your monitor's refresh rate will waste resources, and might give a worse "
+        "result.";
+    constexpr int fpsSliderMax = 360;
+#endif
+    // Keep the ImGui slider ID stable on Android. Renaming the label in the
+    // middle of a touch drag resets ImGui's active widget. Desktop keeps the
+    // existing "Original" label behavior.
     AddWidget(path, "Current FPS: %d", WIDGET_CVAR_SLIDER_INT)
         .CVar("gInterpolationFPS")
+#if !defined(__ANDROID__)
         .Callback([](WidgetInfo& info) {
             int32_t defaultValue = std::static_pointer_cast<IntSliderOptions>(info.options)->defaultValue;
             if (CVarGetInteger(info.cVar, defaultValue) == defaultValue) {
@@ -722,15 +739,12 @@ void BenMenu::AddSettings() {
                 info.name = "Current FPS: %d";
             }
         })
+#endif
         .PreFunc([](WidgetInfo& info) {
             if (mBenMenu->disabledMap.at(DISABLE_FOR_MATCH_REFRESH_RATE_ON).active)
                 info.activeDisables.push_back(DISABLE_FOR_MATCH_REFRESH_RATE_ON);
         })
-        .Options(IntSliderOptions().Min(20).Max(360).DefaultValue(20).Tooltip(
-            "Uses Matrix Interpolation to create extra frames, resulting in smoother graphics. "
-            "This is purely visual and does not impact game logic, execution of glitches etc.\n\n"
-            "A higher target FPS than your monitor's refresh rate will waste resources, and might give a worse "
-            "result."));
+        .Options(IntSliderOptions().Min(20).Max(fpsSliderMax).DefaultValue(20).Tooltip(fpsTooltip));
     AddWidget(path, "Match Refresh Rate", WIDGET_CVAR_CHECKBOX)
         .CVar("gMatchRefreshRate")
         .Options(CheckboxOptions().Tooltip("Matches interpolation value to the refresh rate of your display."));

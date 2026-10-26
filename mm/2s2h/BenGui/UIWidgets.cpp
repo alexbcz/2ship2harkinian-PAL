@@ -725,7 +725,10 @@ static bool AndroidTouchAwareSliderScalar(const char* label, ImGuiDataType type,
     const float dx2 = travel.x * travel.x;
     const float dy2 = travel.y * travel.y;
     const bool classified = pending && io.MouseDown[button] && (dx2 + dy2 >= thresholdSquared);
-    const bool vertical = classified && dy2 > dx2;
+    // Allow moderately diagonal horizontal drags. Treat the gesture as a scroll
+    // only when vertical travel clearly dominates horizontal travel.
+    constexpr float verticalDominance = 1.5f;
+    const bool vertical = classified && dy2 > dx2 * verticalDominance * verticalDominance;
     const bool horizontal = classified && !vertical;
     const bool tapReleased = pending && io.MouseReleased[button] && !io.MouseDown[button];
     const bool freshPress = io.MouseClicked[button] && io.MouseDown[button];

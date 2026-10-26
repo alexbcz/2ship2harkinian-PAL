@@ -160,7 +160,11 @@ static void AndroidMenuScrollWindowTree(ImGuiWindow* menuRoot) {
         travel.x * travel.x + travel.y * travel.y >=
             kAndroidMenuDragThreshold * kAndroidMenuDragThreshold) {
         directionDecided = true;
-        verticalGesture = (travel.y * travel.y > travel.x * travel.x);
+        // Match the slider gesture classification: moderate diagonals should
+        // stay horizontal, whereas clearly vertical swipes scroll the menu.
+        constexpr float verticalDominance = 1.5f;
+        verticalGesture = (travel.y * travel.y >
+                           travel.x * travel.x * verticalDominance * verticalDominance);
     }
     if (!directionDecided || !verticalGesture) {
         return;
