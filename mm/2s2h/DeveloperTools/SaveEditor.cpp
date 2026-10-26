@@ -1489,7 +1489,7 @@ void DrawDungeonItemTab() {
                           ImGuiChildFlags_Border);
         ImGui::Text("%s", dungeonNames[i]);
 #endif
-        const ImTextureID fairyTexture =
+        ImTextureID fairyTexture =
             std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
                 ->GetTextureByName(fairyIcons[dungeonId]);
 #if defined(__ANDROID__)
@@ -1524,7 +1524,7 @@ void DrawDungeonItemTab() {
             SetDungeonItems(DUNGEON_COMPASS, i);
         }
         ImGui::SameLine();
-        const ImTextureID keyTexture =
+        ImTextureID keyTexture =
             std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
                 ->GetTextureByName(gQuestIconSmallKeyTex);
 #if defined(__ANDROID__)
