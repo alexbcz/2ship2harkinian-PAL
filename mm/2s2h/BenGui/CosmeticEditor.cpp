@@ -838,10 +838,30 @@ void CosmeticEditorDrawRow(CosmeticOption& option) {
         CosmeticEditorSave();
     }
 
+#if defined(__ANDROID__)
+    // Place actions beside the color when they fit, otherwise wrap to the next line.
+    // Do not rely on the hard-coded desktop x offset or button width.
+    const ImGuiStyle& style = ImGui::GetStyle();
+    float actionWidth = ImGui::CalcTextSize("Random").x + style.FramePadding.x * 2.0f;
+    actionWidth += ImGui::GetFrameHeight() * 2.0f +
+                   style.ItemInnerSpacing.x * 4.0f +
+                   ImGui::CalcTextSize("Rainbow").x + ImGui::CalcTextSize("Locked").x;
+    actionWidth += style.ItemSpacing.x * 3.0f;
+    if (CVarGetInteger(option.changedCvar, 0)) {
+        actionWidth += ImGui::CalcTextSize("Reset").x + style.FramePadding.x * 2.0f + style.ItemSpacing.x;
+    }
+    const float rightEdge = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+    if (ImGui::GetItemRectMax().x + style.ItemSpacing.x + actionWidth <= rightEdge) {
+        ImGui::SameLine();
+    }
+    const ImVec2 actionSize(0, 0);
+#else
     ImGui::SameLine((ImGui::CalcTextSize("Message Light Blue (None No Shadow)").x * 1.0f) + 60.0f);
+    const ImVec2 actionSize(80, 31);
+#endif
     if (UIWidgets::Button(
             ("Random##" + std::string(option.label)).c_str(),
-            UIWidgets::ButtonOptions().Size(ImVec2(80, 31)).Padding(ImVec2(2.0f, 0.0f)).Color(THEME_COLOR))) {
+            UIWidgets::ButtonOptions().Size(actionSize).Padding(ImVec2(2.0f, 0.0f)).Color(THEME_COLOR))) {
         CosmeticEditorRandomizeElement(option);
     }
 
@@ -862,7 +882,7 @@ void CosmeticEditorDrawRow(CosmeticOption& option) {
     if (CVarGetInteger(option.changedCvar, 0)) {
         ImGui::SameLine();
         if (UIWidgets::Button(("Reset##" + std::string(option.label)).c_str(),
-                              UIWidgets::ButtonOptions().Size(ImVec2(80, 31)).Padding(ImVec2(2.0f, 0.0f)))) {
+                              UIWidgets::ButtonOptions().Size(actionSize).Padding(ImVec2(2.0f, 0.0f)))) {
             CosmeticEditorResetElement(option);
         }
     }
@@ -883,15 +903,20 @@ void CosmeticEditorDrawGroup(CosmeticGroup group, const char* displayName = null
 
     std::string label = displayName != nullptr ? displayName : sCosmeticGroupLabels.at(group);
     ImGui::Text("%s", label.c_str());
+#if defined(__ANDROID__)
+    const ImVec2 groupActionSize(0, 0);
+#else
     ImGui::SameLine((ImGui::CalcTextSize("Message Light Blue (None No Shadow)").x * 1.0f) + 60.0f);
+    const ImVec2 groupActionSize(80, 31);
+#endif
     if (UIWidgets::Button(
             ("Random##" + label).c_str(),
-            UIWidgets::ButtonOptions().Size(ImVec2(80, 31)).Padding(ImVec2(2.0f, 0.0f)).Color(THEME_COLOR))) {
+            UIWidgets::ButtonOptions().Size(groupActionSize).Padding(ImVec2(2.0f, 0.0f)).Color(THEME_COLOR))) {
         CosmeticEditorRandomizeGroup(group);
     }
     ImGui::SameLine();
     if (UIWidgets::Button(("Reset##" + label).c_str(),
-                          UIWidgets::ButtonOptions().Size(ImVec2(80, 31)).Padding(ImVec2(2.0f, 0.0f)))) {
+                          UIWidgets::ButtonOptions().Size(groupActionSize).Padding(ImVec2(2.0f, 0.0f)))) {
         CosmeticEditorResetGroup(group);
     }
     UIWidgets::Spacer();
@@ -927,27 +952,38 @@ void CosmeticEditorWindow::DrawElement() {
             .Color(THEME_COLOR)
             .Tooltip("Randomizes every unlocked cosmetic entry when a new randomizer seed is generated."));
 
-    if (UIWidgets::Button("Randomize All", UIWidgets::ButtonOptions().Size(ImVec2(250.0f, 0.0f)).Color(THEME_COLOR))) {
+#if defined(__ANDROID__)
+    const ImVec2 bulkActionSize(ImGui::GetContentRegionAvail().x, 0.0f);
+#else
+    const ImVec2 bulkActionSize(250.0f, 0.0f);
+#endif
+    if (UIWidgets::Button("Randomize All", UIWidgets::ButtonOptions().Size(bulkActionSize).Color(THEME_COLOR))) {
         CosmeticEditorRandomizeAllElements();
     }
+#if !defined(__ANDROID__)
     ImGui::SameLine();
-    if (UIWidgets::Button("Reset All", UIWidgets::ButtonOptions().Size(ImVec2(250.0f, 0.0f)).Color(THEME_COLOR))) {
+#endif
+    if (UIWidgets::Button("Reset All", UIWidgets::ButtonOptions().Size(bulkActionSize).Color(THEME_COLOR))) {
         CosmeticEditorResetAllElements();
     }
 
-    if (UIWidgets::Button("Lock All", UIWidgets::ButtonOptions().Size(ImVec2(250.0f, 0.0f)).Color(THEME_COLOR))) {
+    if (UIWidgets::Button("Lock All", UIWidgets::ButtonOptions().Size(bulkActionSize).Color(THEME_COLOR))) {
         CosmeticEditorSetAllLocked(true);
     }
+#if !defined(__ANDROID__)
     ImGui::SameLine();
-    if (UIWidgets::Button("Unlock All", UIWidgets::ButtonOptions().Size(ImVec2(250.0f, 0.0f)).Color(THEME_COLOR))) {
+#endif
+    if (UIWidgets::Button("Unlock All", UIWidgets::ButtonOptions().Size(bulkActionSize).Color(THEME_COLOR))) {
         CosmeticEditorSetAllLocked(false);
     }
 
-    if (UIWidgets::Button("Rainbow All", UIWidgets::ButtonOptions().Size(ImVec2(250.0f, 0.0f)).Color(THEME_COLOR))) {
+    if (UIWidgets::Button("Rainbow All", UIWidgets::ButtonOptions().Size(bulkActionSize).Color(THEME_COLOR))) {
         CosmeticEditorSetAllRainbow(true);
     }
+#if !defined(__ANDROID__)
     ImGui::SameLine();
-    if (UIWidgets::Button("Un-Rainbow All", UIWidgets::ButtonOptions().Size(ImVec2(250.0f, 0.0f)).Color(THEME_COLOR))) {
+#endif
+    if (UIWidgets::Button("Un-Rainbow All", UIWidgets::ButtonOptions().Size(bulkActionSize).Color(THEME_COLOR))) {
         CosmeticEditorSetAllRainbow(false);
     }
 

@@ -545,9 +545,17 @@ static void DrawSeedHealthStrip() {
     ImGui::TextColored(DIM_TEXT_COLOR, "Seed Health:");
     ImGui::SameLine();
     ImGui::TextColored(statusTextColor, ICON_FA_CIRCLE " %s", statusText);
+#if defined(__ANDROID__)
+    // Mobile text wraps below the status instead of running past the right edge.
+    ImGui::PushStyleColor(ImGuiCol_Text, DIM_TEXT_COLOR);
+    ImGui::TextWrapped("%d checks  |  %d important items  |  %d junk fill  |  %d excluded",
+                       checksInPool, importantItems, junkInPool, (int)checkExclusionList.size());
+    ImGui::PopStyleColor();
+#else
     ImGui::SameLine(0.0f, 30.0f);
     ImGui::TextColored(DIM_TEXT_COLOR, "%d checks  |  %d important items  |  %d junk fill  |  %d excluded",
                        checksInPool, importantItems, junkInPool, (int)checkExclusionList.size());
+#endif
 
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
     ImGui::PushStyleColor(ImGuiCol_PlotHistogram, statusBarColor);
@@ -692,9 +700,15 @@ static void SetSceneryDropOptions(int32_t value) {
     Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }
 
-static const UIWidgets::CardLayoutOptions POOL_CARD_LAYOUT = { .columnsPerRow = 3,
-                                                               .minColumnWidth = 400.0f,
-                                                               .childFlags = ImGuiChildFlags_AutoResizeY };
+static const UIWidgets::CardLayoutOptions POOL_CARD_LAYOUT = {
+#if defined(__ANDROID__)
+    .columnsPerRow = 1,
+#else
+    .columnsPerRow = 3,
+#endif
+    .minColumnWidth = 400.0f,
+    .childFlags = ImGuiChildFlags_AutoResizeY,
+};
 
 static void DrawCheckPoolTab() {
     DrawSeedHealthStrip();
@@ -1208,11 +1222,20 @@ static void DrawItemPoolTab() {
 
 static void DrawStartingItemsTab() {
     f32 columnWidth = ImGui::GetContentRegionAvail().x / 2 - (ImGui::GetStyle().ItemSpacing.x * 2);
+#if !defined(__ANDROID__)
     f32 quarterHeight = ImGui::GetContentRegionAvail().y / 4 - (ImGui::GetStyle().ItemSpacing.y * 4);
+#endif
     int tableColumns = 0;
+#if !defined(__ANDROID__)
     ImGui::BeginChild("randoStartingOptions", ImVec2(0, 120.0f));
+#endif
     ImGui::SeparatorText("Starting Options");
-    if (ImGui::BeginTable("Starting Options", 3)) {
+#if defined(__ANDROID__)
+    constexpr int startingOptionsColumns = 1;
+#else
+    constexpr int startingOptionsColumns = 3;
+#endif
+    if (ImGui::BeginTable("Starting Options", startingOptionsColumns)) {
         ImGui::TableNextColumn();
         CVarCheckbox("Wallet Full", Rando::StaticData::Options[RO_STARTING_RUPEES].cvar,
                      CheckboxOptions({ {
@@ -1243,8 +1266,12 @@ static void DrawStartingItemsTab() {
 
         ImGui::EndTable();
     }
+#if !defined(__ANDROID__)
     ImGui::EndChild();
+#endif
+#if !defined(__ANDROID__)
     ImGui::BeginChild("randoStartingItems1", ImVec2(0, quarterHeight));
+#endif
     ImGui::SeparatorText("Starting Items");
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(15, 15));
@@ -1257,7 +1284,11 @@ static void DrawStartingItemsTab() {
     uint32_t listIndex = 0;
     for (auto& startingItem : setStartingItemsList) {
         ImGui::PushID(listIndex);
+#if defined(__ANDROID__)
+        ImVec2 imageSize = ImVec2(52.0f, 52.0f);
+#else
         ImVec2 imageSize = ImVec2(42.0f, 42.0f);
+#endif
         if ((startingItem >= RI_SONG_DOUBLE_TIME && startingItem <= RI_SONG_TIME) ||
             startingItem == RI_PROGRESSIVE_LULLABY) {
             imageSize.x /= 1.5f;
@@ -1285,17 +1316,28 @@ static void DrawStartingItemsTab() {
         UIWidgets::Tooltip(tooltipText.c_str());
         listIndex++;
 
+#if defined(__ANDROID__)
+        // Never leave SameLine pending when the Available Items heading follows.
+        const float nextIconWidth = 52.0f + ImGui::GetStyle().ItemSpacing.x;
+        if (listIndex < setStartingItemsList.size() && listIndex % 15 != 0 &&
+            ImGui::GetContentRegionAvail().x >= nextIconWidth) {
+            ImGui::SameLine();
+        }
+#else
         if ((listIndex + 1) % 15 != 0) {
             ImGui::SameLine();
         }
+#endif
         ImGui::PopID();
     }
 
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar(2);
 
-    ImGui::EndChild();
+#if !defined(__ANDROID__)
+    ImGui::EndChild(); // randoStartingItems1
     ImGui::BeginChild("randoStartingItems2", ImVec2(0, 0));
+#endif
     ImGui::SeparatorText("Available Items");
 
     for (auto& category : Rando::StaticData::StartingItemsMap) {
@@ -1317,7 +1359,11 @@ static void DrawStartingItemsTab() {
 
             if (ImGui::BeginTable(std::to_string(category.first).c_str(), tableColumns)) {
                 for (int i = 0; i < tableColumns; i++) {
+#if defined(__ANDROID__)
+                    ImGui::TableSetupColumn("item", ImGuiTableColumnFlags_WidthFixed, 62.0f);
+#else
                     ImGui::TableSetupColumn("item", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+#endif
                 }
                 for (auto& item : category.second) {
                     if (setOfItemsInPool.count(item) == 0) {
@@ -1325,7 +1371,11 @@ static void DrawStartingItemsTab() {
                         continue;
                     }
 
+#if defined(__ANDROID__)
+                    ImVec2 imageSize = ImVec2(52.0f, 52.0f);
+#else
                     ImVec2 imageSize = ImVec2(42.0f, 42.0f);
+#endif
                     if ((item >= RI_SONG_DOUBLE_TIME && item <= RI_SONG_TIME) || item == RI_PROGRESSIVE_LULLABY) {
                         imageSize.x /= 1.5f;
                     }
@@ -1380,7 +1430,9 @@ static void DrawStartingItemsTab() {
             ImGui::SameLine();
         }
     }
-    ImGui::EndChild();
+#if !defined(__ANDROID__)
+    ImGui::EndChild(); // randoStartingItems2
+#endif
 }
 
 static void BulkExcludeChecks(const std::vector<RandoCheckId>& checks) {
@@ -1457,6 +1509,9 @@ static void DrawCheckGroupFilter(UIWidgets::Colors menuThemeColor) {
 
 static bool IsCheckShownAsShuffled(RandoCheckId randoCheckId, ImGuiTextFilter& filter) {
     return randoCheckId != RC_UNKNOWN && setOfChecksInPool.contains(randoCheckId) &&
+#if defined(__ANDROID__)
+           !std::binary_search(checkExclusionList.begin(), checkExclusionList.end(), randoCheckId) &&
+#endif
            PassesCheckGroupFilter(randoCheckId) &&
            filter.PassFilter(Rando::StaticData::CheckNames[randoCheckId].c_str());
 }
@@ -1472,8 +1527,10 @@ static RandoCheckId DrawCheckList(const char* id, const char* title, const char*
     RandoCheckId clickedCheck = RC_UNKNOWN;
 
     ImGui::PushID(id);
+#if !defined(__ANDROID__)
     ImGui::BeginChild("CheckListPane", ImVec2(columnWidth, ImGui::GetContentRegionAvail().y), ImGuiChildFlags_None,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+#endif
     char label[64];
     snprintf(label, sizeof(label), "%s (%d shown)", title, (int)shownChecks.size());
     ImGui::SeparatorText(label);
@@ -1486,20 +1543,53 @@ static RandoCheckId DrawCheckList(const char* id, const char* title, const char*
         bulkActionFlag = true;
     }
 
+#if !defined(__ANDROID__)
     ImGui::BeginChild("CheckListRows", ImVec2(0, 0));
+#endif
+#if defined(__ANDROID__)
+    if (ImGui::BeginTable("MobileCheckActions", 2)) {
+        ImGui::TableSetupColumn("Location", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed,
+                                ImGui::CalcTextSize(bulkVerb).x + ImGui::GetStyle().FramePadding.x * 4.0f);
+        for (int i = 0; i < (int)shownChecks.size(); i++) {
+#else
     ImGuiListClipper clipper;
     clipper.Begin((int)shownChecks.size());
     while (clipper.Step()) {
         for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
+#endif
             RandoCheckId randoCheckId = shownChecks[i];
+#if defined(__ANDROID__)
+            // One action per row on Android. The name can wrap; unlike the
+            // upstream selectable, no text is lost behind a narrow column.
+            ImGui::PushID((int)randoCheckId);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", Rando::StaticData::CheckNames[randoCheckId].c_str());
+            ImGui::TableNextColumn();
+            if (Button(bulkVerb, ButtonOptions().Size(ImVec2(ImGui::GetContentRegionAvail().x, 0))
+                                              .Color(bulkColor)) &&
+                ImGui::GetIO().MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] < 18.0f * 18.0f) {
+                clickedCheck = randoCheckId;
+            }
+            ImGui::PopID();
+#else
             if (ImGui::Selectable(Rando::StaticData::CheckNames[randoCheckId].c_str())) {
                 clickedCheck = randoCheckId;
             }
             UIWidgets::Tooltip(rowTooltip);
+#endif
         }
+#if defined(__ANDROID__)
+        ImGui::EndTable();
     }
-    ImGui::EndChild();
-    ImGui::EndChild();
+#else
+    }
+#endif
+#if !defined(__ANDROID__)
+    ImGui::EndChild(); // CheckListRows
+    ImGui::EndChild(); // CheckListPane
+#endif
     ImGui::PopID();
 
     return clickedCheck;
@@ -1549,15 +1639,34 @@ static void DrawCheckExclusionsTab() {
         }
     }
 
+    RandoCheckId checkToExclude = RC_UNKNOWN;
+    RandoCheckId checkToRestore = RC_UNKNOWN;
+#if defined(__ANDROID__)
+    // Give each check list the full width of the mobile menu.
+    if (ImGui::BeginTabBar("RandoCheckExclusionsMobile")) {
+        if (ImGui::BeginTabItem("In Pool")) {
+            checkToExclude = DrawCheckList("randoIncludedChecks", "In Pool", "Click to exclude",
+                                           shownShuffledChecks, "Exclude", UIWidgets::Colors::Red,
+                                           excludeShownChecks, ImGui::GetContentRegionAvail().x);
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Excluded")) {
+            checkToRestore = DrawCheckList("randoExcludedChecks", "Excluded", "Click to restore",
+                                           shownExcludedChecks, "Restore", UIWidgets::Colors::Green,
+                                           restoreShownChecks, ImGui::GetContentRegionAvail().x);
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
+#else
     f32 columnWidth = ImGui::GetContentRegionAvail().x / 2 - (ImGui::GetStyle().ItemSpacing.x * 2);
 
-    RandoCheckId checkToExclude =
-        DrawCheckList("randoIncludedChecks", "In Pool", "Click to exclude", shownShuffledChecks, "Exclude",
-                      UIWidgets::Colors::Red, excludeShownChecks, columnWidth);
+    checkToExclude = DrawCheckList("randoIncludedChecks", "In Pool", "Click to exclude", shownShuffledChecks,
+                                  "Exclude", UIWidgets::Colors::Red, excludeShownChecks, columnWidth);
     ImGui::SameLine();
-    RandoCheckId checkToRestore =
-        DrawCheckList("randoExcludedChecks", "Excluded", "Click to restore", shownExcludedChecks, "Restore",
-                      UIWidgets::Colors::Green, restoreShownChecks, columnWidth);
+    checkToRestore = DrawCheckList("randoExcludedChecks", "Excluded", "Click to restore", shownExcludedChecks,
+                                  "Restore", UIWidgets::Colors::Green, restoreShownChecks, columnWidth);
+#endif
 
     if (checkToExclude != RC_UNKNOWN) {
         auto it = std::lower_bound(checkExclusionList.begin(), checkExclusionList.end(), checkToExclude);
@@ -1579,10 +1688,21 @@ static void DrawCheckExclusionsTab() {
     if (restoreShownChecks) {
         BulkRestoreChecks(shownExcludedChecks);
     }
+#if defined(__ANDROID__)
+    if (checkToExclude != RC_UNKNOWN || checkToRestore != RC_UNKNOWN ||
+        excludeShownChecks || restoreShownChecks) {
+        // Rebuild the two filtered lists next frame after a mutation.
+        shownListsGeneration = checkPoolGeneration + 1;
+    }
+#endif
 }
 
 static void DrawHintsTab() {
-    f32 columnWidth = ImGui::GetContentRegionAvail().x / 3 - (ImGui::GetStyle().ItemSpacing.x * 2);
+#if defined(__ANDROID__)
+    const f32 columnWidth = 0.0f; // A zero-width child fills the available space.
+#else
+    const f32 columnWidth = ImGui::GetContentRegionAvail().x / 3 - (ImGui::GetStyle().ItemSpacing.x * 2);
+#endif
     f32 halfHeight = ImGui::GetContentRegionAvail().y / 2 - (ImGui::GetStyle().ItemSpacing.y * 2);
     ImGui::BeginChild("randoHintsColumn1", ImVec2(columnWidth, 0));
     CVarCheckbox(

@@ -47,6 +47,7 @@ import android.widget.TextView;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -55,6 +56,40 @@ import android.widget.ImageView;
 
 //This class is the main SDLActivity and just sets up a bunch of default files and the input overlay
 public class MainActivity extends SDLActivity{
+
+    // Called by the Android search field after an explicit tap. SDL2 keeps its
+    // text-input state even if Back dismissed the IME, so SDL_StartTextInput()
+    // alone does not always reopen the visible keyboard.
+    public void requestSearchKeyboardFromNative() {
+        runOnUiThread(() -> {
+            View editor = SDLActivity.mTextEdit;
+            if (editor == null) {
+                // SDL's editor has not been constructed yet. The SDLActivity
+                // helper creates it and opens the IME on the UI thread.
+                SDLActivity.showTextInput(0, 0, 1, 1);
+                return;
+            }
+
+            editor.setVisibility(View.VISIBLE);
+            editor.requestFocus();
+            editor.post(() -> {
+                if (!editor.hasFocus() || !editor.hasWindowFocus()) {
+                    return;
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    WindowInsetsController controller = editor.getWindowInsetsController();
+                    if (controller != null) {
+                        controller.show(WindowInsets.Type.ime());
+                        return;
+                    }
+                }
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.showSoftInput(editor, 0);
+                }
+            });
+        });
+    }
 
     SharedPreferences preferences;
     private static final CountDownLatch setupLatch = new CountDownLatch(1);
@@ -1159,10 +1194,14 @@ public class MainActivity extends SDLActivity{
         }
 
         boolean touchControlsDisabled = preferences.getBoolean(PREF_TOUCH_CONTROLS_DISABLED, false);
-        overlayView.setVisibility(touchControlsDisabled ? View.GONE : View.VISIBLE);
+        boolean controlsHidden = preferences.getBoolean(PREF_TOUCH_CONTROLS_HIDDEN, false);
+        boolean menuOpen = !TouchAreaEnabled;
+
+        // Hide the entire touch overlay while any game menu is visible.
+        // Do not change the user's saved controller preferences.
+        overlayView.setVisibility(touchControlsDisabled || menuOpen ? View.GONE : View.VISIBLE);
 
         if (buttonGroup != null) {
-            boolean controlsHidden = preferences.getBoolean(PREF_TOUCH_CONTROLS_HIDDEN, false);
             buttonGroup.setVisibility(controlsHidden ? View.INVISIBLE : View.VISIBLE);
         }
     }
@@ -1225,13 +1264,16 @@ public class MainActivity extends SDLActivity{
         });
     }
 
-    boolean TouchAreaEnabled = true;
+    private volatile boolean TouchAreaEnabled = true;
 
-    void DisableTouchArea(){
+    void DisableTouchArea() {
         TouchAreaEnabled = false;
+        runOnUiThread(this::applyTouchControlsVisibility);
     }
-    void EnableTouchArea(){
+
+    void EnableTouchArea() {
         TouchAreaEnabled = true;
+        runOnUiThread(this::applyTouchControlsVisibility);
     }
 
     private void setupFloatingJoystick(FrameLayout touchArea) {

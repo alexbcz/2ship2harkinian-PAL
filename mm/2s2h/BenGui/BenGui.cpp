@@ -30,6 +30,10 @@
 #include "Enhancements/Trackers/TimeSplits/TimesplitsSettings.h"
 #include "BenMenu.h"
 #include "BenMenuBar.h"
+
+#ifdef __ANDROID__
+#include <ship/port/mobile/MobileImpl.h>
+#endif
 #include "DeveloperTools/HookDebugger.h"
 #include "DeveloperTools/SaveEditor.h"
 #include "DeveloperTools/ActorViewer.h"
@@ -39,6 +43,21 @@
 #include "DeveloperTools/MessageViewer.h"
 
 namespace BenGui {
+
+void BenMenu::SetVisibility(bool visible) {
+    Ship::Menu::SetVisibility(visible);
+
+#ifdef __ANDROID__
+    // Unlike the toggle-key handler, this also runs for the ImGui close button.
+    auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
+    if (gui->GetMenuOrMenubarVisible()) {
+        Ship::Mobile::DisableTouchArea();
+    } else {
+        Ship::Mobile::EnableTouchArea();
+    }
+#endif
+}
+
 // MARK: - Delegates
 
 std::shared_ptr<BenMenuBar> mBenMenuBar;
@@ -83,18 +102,10 @@ void SetupMenu() {
 
     auto& style = ImGui::GetStyle();
 #if defined(__ANDROID__)
-    float androidMenuScale = CVarGetFloat("gSettings.Menu.AndroidScale", 1.45f);
-    if (androidMenuScale < 1.0f) {
-        androidMenuScale = 1.0f;
-    } else if (androidMenuScale > 3.0f) {
-        androidMenuScale = 3.0f;
-    }
-    style.FramePadding = ImVec2(4.0f * androidMenuScale, 6.0f * androidMenuScale);
-    style.ItemSpacing = ImVec2(8.0f * androidMenuScale, 6.0f * androidMenuScale);
-    style.ItemInnerSpacing = ImVec2(4.0f * androidMenuScale, 4.0f * androidMenuScale);
-    style.ScrollbarSize = 14.0f * androidMenuScale;
-    style.GrabMinSize = 12.0f * androidMenuScale;
-    ImGui::GetIO().FontGlobalScale = androidMenuScale;
+    // libultraship already called ScaleAllSizes() at startup; don't compound
+    // that global scale when applying the Android-specific touch style.
+    const float androidMenuScale = CVarGetFloat("gSettings.Menu.AndroidScale", AndroidMenuStyle::DefaultScale);
+    AndroidMenuStyle::Apply(androidMenuScale);
 #else
     style.FramePadding = ImVec2(4.0f, 6.0f);
     style.ItemSpacing = ImVec2(8.0f, 6.0f);

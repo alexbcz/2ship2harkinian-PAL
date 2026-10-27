@@ -8,12 +8,13 @@
 #include "2s2h/ShipUtils.h"
 #include <spdlog/fmt/fmt.h>
 #include "2s2h/BenPort.h"
+#include "AndroidMenuStyle.h"
 
 namespace UIWidgets {
 
 static ImVec2 AndroidCompactPadding(ImVec2 padding) {
 #if defined(__ANDROID__)
-    return ImVec2(std::min(padding.x, 6.0f), std::min(padding.y, 3.0f));
+    return AndroidMenuStyle::WidgetPadding(padding);
 #else
     return padding;
 #endif
@@ -235,6 +236,16 @@ bool IconButton(const char* strId, const char* icon, const ButtonOptions& option
 
 bool WindowButton(const char* label, const char* cvarName, std::shared_ptr<Ship::GuiWindow> windowPtr,
                   const WindowButtonOptions& options) {
+#if defined(__ANDROID__)
+    // Popout windows duplicate an embedded editor on mobile and consume scarce
+    // screen space. Keep the editor embedded without disabling normal pickers.
+    if (std::string(label).rfind("Popout ", 0) == 0) {
+        if (windowPtr && windowPtr->IsVisible()) {
+            windowPtr->ToggleVisibility();
+        }
+        return false;
+    }
+#endif
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0, 0));
     std::string buttonText = label;
     bool dirty = false;
@@ -471,6 +482,26 @@ bool Checkbox(const char* _label, bool* value, const CheckboxOptions& options) {
     }
     bool hovered, held, pressed;
     pressed = ImGui::ButtonBehavior(total_bb, id, &hovered, &held);
+#if defined(__ANDROID__)
+    // Android touches are mouse events. A vertical swipe that begins over a
+    // checkbox should release its active ID so the menu can scroll instead.
+    // Match the drag threshold used by AndroidMenuScrollWindowTree in Menu.cpp.
+    constexpr float kAndroidTouchScrollThreshold = 18.0f;
+    constexpr float kThresholdSquared = kAndroidTouchScrollThreshold * kAndroidTouchScrollThreshold;
+    const ImGuiIO& io = ImGui::GetIO();
+    const ImVec2 drag = io.MousePos - io.MouseClickedPos[ImGuiMouseButton_Left];
+    const bool verticalSwipe = io.MouseDown[ImGuiMouseButton_Left] &&
+                               drag.x * drag.x + drag.y * drag.y >= kThresholdSquared &&
+                               drag.y * drag.y > drag.x * drag.x;
+    if (verticalSwipe && g.ActiveId == id) {
+        ImGui::ClearActiveID();
+        held = false;
+    }
+    // Do not toggle if a drag moves away and then ends back on the checkbox.
+    if (pressed && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] > kThresholdSquared) {
+        pressed = false;
+    }
+#endif
     if (pressed) {
         *value = !(*value);
         ImGui::MarkItemEdited(id);
@@ -662,6 +693,75 @@ void PopStyleSlider() {
     ImGui::PopStyleColor(6);
 }
 
+#if defined(__ANDROID__)
+// Keep the displayed slider value stable until a touch is recognized as
+// horizontal. A vertical swipe is handled by AndroidMenuScrollWindowTree().
+// The private ReadOnly flag lets ImGui keep the widget active and draw its
+// original value without executing SliderBehavior's value update.
+template <typename T>
+static bool AndroidTouchAwareSliderScalar(const char* label, ImGuiDataType type, T* value,
+                                          const T* minValue, const T* maxValue,
+                                          const char* format, ImGuiSliderFlags flags) {
+    static ImGuiID pendingId = 0;
+    static int lastPressFrame = -1;
+    constexpr float thresholdSquared = 18.0f * 18.0f;
+    constexpr int button = ImGuiMouseButton_Left;
+    ImGuiIO& io = ImGui::GetIO();
+    ImGuiContext& g = *GImGui;
+    const ImGuiID id = ImGui::GetID(label);
+
+    // Reset only once for a new press, not once per slider drawn this frame.
+    if (io.MouseClicked[button] && g.FrameCount != lastPressFrame) {
+        lastPressFrame = g.FrameCount;
+        pendingId = 0;
+    }
+    bool pending = pendingId == id;
+    if (pending && !io.MouseDown[button] && !io.MouseReleased[button]) {
+        pendingId = 0; // The touch ended while this item was not drawn.
+        pending = false;
+    }
+
+    const ImVec2 travel = io.MousePos - io.MouseClickedPos[button];
+    const float dx2 = travel.x * travel.x;
+    const float dy2 = travel.y * travel.y;
+    const bool classified = pending && io.MouseDown[button] && (dx2 + dy2 >= thresholdSquared);
+    // Allow moderately diagonal horizontal drags. Treat the gesture as a scroll
+    // only when vertical travel clearly dominates horizontal travel.
+    constexpr float verticalDominance = 1.5f;
+    const bool vertical = classified && dy2 > dx2 * verticalDominance * verticalDominance;
+    const bool horizontal = classified && !vertical;
+    const bool tapReleased = pending && io.MouseReleased[button] && !io.MouseDown[button];
+    const bool freshPress = io.MouseClicked[button] && io.MouseDown[button];
+
+    // Do not even render a tentative new value for an undecided gesture.
+    const bool readOnly = freshPress || (pending && !horizontal && !tapReleased);
+    const ImGuiSliderFlags effectiveFlags = flags | (readOnly ? ImGuiSliderFlags_ReadOnly : 0);
+
+    // ImGui normally updates on mouse-down. For a tap (no drag direction),
+    // replay only the down state during this single slider call at release.
+    // This keeps tap-to-set working without displaying a tentative value.
+    const bool realMouseDown = io.MouseDown[button];
+    if (tapReleased) {
+        io.MouseDown[button] = true;
+    }
+    const bool changed = ImGui::SliderScalar(label, type, value, minValue, maxValue, format, effectiveFlags);
+    io.MouseDown[button] = realMouseDown;
+
+    if (freshPress && g.ActiveId == id && g.ActiveIdSource == ImGuiInputSource_Mouse) {
+        pendingId = id;
+    }
+    if (vertical || tapReleased) {
+        if (g.ActiveId == id) {
+            ImGui::ClearActiveID();
+        }
+        pendingId = 0;
+    } else if (horizontal) {
+        pendingId = 0; // ImGui now handles the remaining horizontal drag.
+    }
+    return changed;
+}
+#endif
+
 bool SliderInt(const char* label, int32_t* value, const IntSliderOptions& options) {
     bool dirty = false;
     std::string invisibleLabelStr = "##" + std::string(label);
@@ -708,8 +808,13 @@ bool SliderInt(const char* label, int32_t* value, const IntSliderOptions& option
         buttonsWidth += (ImGui::CalcTextSize("+").x + (ImGui::GetStyle().FramePadding.x * 2) + 3) * 2;
     }
     ImGui::SetNextItemWidth(width - buttonsWidth);
+#if defined(__ANDROID__)
+    if (AndroidTouchAwareSliderScalar(invisibleLabel, ImGuiDataType_S32, value, &options.min, &options.max,
+                                      options.format, options.flags)) {
+#else
     if (ImGui::SliderScalar(invisibleLabel, ImGuiDataType_S32, value, &options.min, &options.max, options.format,
                             options.flags)) {
+#endif
         if (options.clamp) {
             if (*value < options.min) {
                 *value = options.min;
@@ -855,8 +960,13 @@ bool SliderFloat(const char* label, float* value, const FloatSliderOptions& opti
         buttonsWidth += (ImGui::CalcTextSize("+").x + (ImGui::GetStyle().FramePadding.x * 2) + 3) * 2;
     }
     ImGui::SetNextItemWidth(width - buttonsWidth);
+#if defined(__ANDROID__)
+    if (AndroidTouchAwareSliderScalar(invisibleLabel, ImGuiDataType_Float, &valueToDisplay, &minToDisplay,
+                                      &maxToDisplay, options.format, options.flags)) {
+#else
     if (ImGui::SliderScalar(invisibleLabel, ImGuiDataType_Float, &valueToDisplay, &minToDisplay, &maxToDisplay,
                             options.format, options.flags)) {
+#endif
         *value = options.isPercentage ? valueToDisplay / 100.0f : valueToDisplay;
         if (options.clamp) {
             ClampFloat(value, options.min, options.max, options.step);

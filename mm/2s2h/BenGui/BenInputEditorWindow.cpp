@@ -1398,7 +1398,7 @@ void BenInputEditorWindow::DrawPortTabContents(uint8_t portIndex) {
     }
 
     if (ImGui::CollapsingHeader("Modifier Buttons", NULL, ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::TextWrapped("These can be bound to physical buttons and be selected for use in various\nenhancements, "
+        ImGui::TextWrapped("These can be bound to physical buttons and be selected for use in various enhancements, "
                            "but otherwise have no use on their own.");
         DrawButtonLine("M1", portIndex, BTN_CUSTOM_MODIFIER1);
         DrawButtonLine("M2", portIndex, BTN_CUSTOM_MODIFIER2);

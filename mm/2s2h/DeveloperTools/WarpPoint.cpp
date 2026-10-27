@@ -103,15 +103,27 @@ static std::string warpNameInput = "";
 void RenderWarpPointSection() {
     ImGui::SeparatorText("Warp Points");
     if (gPlayState != NULL && GET_PLAYER(gPlayState) != NULL) {
+#if defined(__ANDROID__)
+        // Do not reserve an arbitrary 50px for a button that scales with the mobile font.
+        const ImVec2 nameInputSize(ImGui::GetContentRegionAvail().x, 0.0f);
+#else
+        const ImVec2 nameInputSize(ImGui::GetContentRegionAvail().x - 50.0f, 0.0f);
+#endif
         UIWidgets::InputString("##WarpPointNameInput", &warpNameInput,
                                {
                                    .labelPosition = UIWidgets::LabelPosition::None,
-                                   .size = ImVec2(ImGui::GetContentRegionAvail().x - 50.0f, 0.0f),
+                                   .size = nameInputSize,
                                    .placeholder = "Enter warp point name...",
                                });
 
+#if defined(__ANDROID__)
+        const bool addWarpPoint = UIWidgets::Button(
+            ICON_FA_PLUS " Add Warp Point", { .size = ImVec2(ImGui::GetContentRegionAvail().x, 0.0f) });
+#else
         ImGui::SameLine();
-        if (UIWidgets::Button(ICON_FA_PLUS)) {
+        const bool addWarpPoint = UIWidgets::Button(ICON_FA_PLUS);
+#endif
+        if (addWarpPoint) {
             Player* player = GET_PLAYER(gPlayState);
 
             bool isEmpty = warpNameInput.empty();

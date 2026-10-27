@@ -2,6 +2,7 @@
 #define BENMENU_H
 
 #include "UIWidgets.hpp"
+#include "AndroidMenuStyle.h"
 #include "Menu.h"
 #include "2s2h/Enhancements/Enhancements.h"
 #include "2s2h/DeveloperTools/DeveloperTools.h"
@@ -12,6 +13,8 @@ namespace BenGui {
 class BenMenu : public Ship::Menu {
   public:
     BenMenu(const std::string& consoleVariable, const std::string& name);
+
+    void SetVisibility(bool visible) override;
 
     void InitElement() override;
     void DrawElement() override;

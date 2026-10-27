@@ -12,6 +12,11 @@
 #include <tuple>
 #include <ship/config/Config.h>
 
+#if defined(__ANDROID__)
+#include <SDL.h>
+#include <jni.h>
+#endif
+
 #include <fast/Fast3dWindow.h>
 
 extern "C" {
@@ -69,6 +74,126 @@ bool operator>(Color_RGBA8 const& l, Color_RGBA8 const& r) noexcept {
 uint32_t GetVectorIndexOf(std::vector<std::string>& vector, std::string value) {
     return std::distance(vector.begin(), std::find(vector.begin(), vector.end(), value));
 }
+
+#if defined(__ANDROID__)
+// An ImGui InputText can stay active after Android's Back gesture hides the IME.
+// Re-request the real SDL text editor on a *new tap*, not on every frame with
+// WantTextInput=true, so users can hide the keyboard to inspect search results.
+static void AndroidRequestSearchKeyboard() {
+    // Also ensures SDL receives SDL_TEXTINPUT events when the field is opened.
+    SDL_StartTextInput();
+
+    JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
+    jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
+    if (env == nullptr || activity == nullptr) {
+        return;
+    }
+
+    jclass activityClass = env->GetObjectClass(activity);
+    if (activityClass != nullptr) {
+        jmethodID requestMethod = env->GetMethodID(activityClass, "requestSearchKeyboardFromNative", "()V");
+        if (requestMethod != nullptr) {
+            env->CallVoidMethod(activity, requestMethod);
+        }
+        env->DeleteLocalRef(activityClass);
+    }
+    env->DeleteLocalRef(activity);
+}
+
+// Mobile drag-scroll is resolved once after all child windows have been drawn.
+// This also covers widgets drawing their own nested BeginChild() windows.
+static constexpr float kAndroidMenuDragThreshold = 18.0f;
+static void AndroidMenuScrollWindowTree(ImGuiWindow* menuRoot) {
+    ImGuiIO& io = ImGui::GetIO();
+    ImGuiContext& g = *GImGui;
+    constexpr int button = ImGuiMouseButton_Left;
+    static ImGuiID targetWindowId = 0;
+    static bool directionDecided = false;
+    static bool verticalGesture = false;
+
+    if (!io.MouseDown[button]) {
+        targetWindowId = 0;
+        directionDecided = false;
+        verticalGesture = false;
+        return;
+    }
+
+    if (io.MouseClicked[button]) {
+        targetWindowId = 0;
+        directionDecided = false;
+        verticalGesture = false;
+        const ImVec2 origin = io.MouseClickedPos[button];
+        int bestDepth = -1;
+        // A child window can be scrollable even when its parent isn't.
+        for (ImGuiWindow* candidate : g.Windows) {
+            if (!candidate->Active || candidate->ScrollMax.y <= 0.0f ||
+                (candidate->Flags & ImGuiWindowFlags_NoMouseInputs) ||
+                !candidate->ClipRect.Contains(origin) ||
+                !ImRect(candidate->Pos, candidate->Pos + candidate->Size).Contains(origin)) {
+                continue;
+            }
+            int depth = 0;
+            ImGuiWindow* parent = candidate;
+            while (parent != nullptr && parent != menuRoot) {
+                parent = parent->ParentWindow;
+                depth++;
+            }
+            if (parent == menuRoot && depth > bestDepth) {
+                targetWindowId = candidate->ID;
+                bestDepth = depth;
+            }
+        }
+        if (ImGuiWindow* target = ImGui::FindWindowByID(targetWindowId)) {
+            // Preserve the native drag behavior of scrollbar handles.
+            if (target->ScrollbarY &&
+                origin.x >= target->Pos.x + target->Size.x - ImGui::GetStyle().ScrollbarSize) {
+                targetWindowId = 0;
+            }
+        }
+    }
+
+    if (targetWindowId == 0) {
+        return;
+    }
+    const ImVec2 travel = io.MousePos - io.MouseClickedPos[button];
+    if (!directionDecided &&
+        travel.x * travel.x + travel.y * travel.y >=
+            kAndroidMenuDragThreshold * kAndroidMenuDragThreshold) {
+        directionDecided = true;
+        // Match the slider gesture classification: moderate diagonals should
+        // stay horizontal, whereas clearly vertical swipes scroll the menu.
+        constexpr float verticalDominance = 1.5f;
+        verticalGesture = (travel.y * travel.y >
+                           travel.x * travel.x * verticalDominance * verticalDominance);
+    }
+    if (!directionDecided || !verticalGesture) {
+        return;
+    }
+
+    ImGuiWindow* target = ImGui::FindWindowByID(targetWindowId);
+    if (target == nullptr || !target->Active) {
+        return;
+    }
+    // A confirmed vertical swipe should scroll even when it began on a slider
+    // or another active widget. Horizontal gestures still belong to widgets.
+    // Sidebar entries already allow scrolling without releasing their active ID.
+    const bool sidebar = std::string(target->Name).find(" Section") != std::string::npos;
+    if (!sidebar && g.ActiveId != 0 && g.ActiveIdWindow != nullptr &&
+        g.ActiveId != g.ActiveIdWindow->MoveId) {
+        for (const ImGuiWindow* active = g.ActiveIdWindow; active != nullptr; active = active->ParentWindow) {
+            if (active == target) {
+                // Preserve intentional drag-and-drop, e.g. rearranging tracker items.
+                if (g.DragDropActive) {
+                    return;
+                }
+                ImGui::ClearActiveID();
+                break;
+            }
+        }
+    }
+    ImGui::SetScrollY(target, target->Scroll.y - io.MouseDelta.y);
+}
+#endif
 
 void Menu::InsertSidebarSearch() {
     menuEntries["Settings"].sidebars.emplace("Search", searchSidebarEntry);
@@ -153,6 +278,13 @@ bool ModernMenuSidebarEntry(std::string label) {
     ImGui::ItemAdd(bb, sidebarId);
     bool hovered, held;
     bool pressed = ImGui::ButtonBehavior(bb, sidebarId, &hovered, &held);
+#if defined(__ANDROID__)
+    // A swipe over a category must not switch sections on finger release.
+    if (pressed && ImGui::GetIO().MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] >
+                       kAndroidMenuDragThreshold * kAndroidMenuDragThreshold) {
+        pressed = false;
+    }
+#endif
     if (pressed) {
         ImGui::MarkItemEdited(sidebarId);
     }
@@ -189,7 +321,11 @@ bool ModernMenuHeaderEntry(std::string label) {
 
 uint32_t Menu::DrawSearchResults(std::string& menuSearchText) {
     auto menuThemeIndex = static_cast<UIWidgets::Colors>(CVarGetInteger("gSettings.Menu.Theme", defaultThemeIndex));
+#if !defined(__ANDROID__)
+    // Desktop retains its nested search-results child. On Android, render into
+    // the already-scrollable settings child so touch scrolling has one owner.
     ImGui::BeginChild("Search Results");
+#endif
     int searchCount = 0;
     for (auto& menuLabel : menuOrder) {
         auto& menuEntry = menuEntries.at(menuLabel);
@@ -238,6 +374,26 @@ uint32_t Menu::DrawSearchResults(std::string& menuSearchText) {
             searchCount++;
         }
     }
+#if defined(__ANDROID__)
+    // This window receives a scroll-to-top target (0) every frame while
+    // rendering search results. It is applied by ImGui on the following frame,
+    // snapping back after the user stops dragging the list or its scrollbar.
+    ImGuiWindow* resultsWindow = ImGui::GetCurrentWindow();
+    static std::string previousQuery;
+    static ImGuiID previousWindowId = 0;
+    static int previousFrame = -1;
+    const int frame = ImGui::GetFrameCount();
+    const bool searchChanged = previousQuery != menuSearchText || previousWindowId != resultsWindow->ID ||
+                               (previousFrame >= 0 && frame > previousFrame + 1);
+    if (searchChanged) {
+        ImGui::SetScrollY(resultsWindow, 0.0f);
+    } else if (resultsWindow->Scroll.y > 0.0f && resultsWindow->ScrollTarget.y == 0.0f) {
+        resultsWindow->ScrollTarget.y = FLT_MAX; // No pending scroll request
+    }
+    previousQuery = menuSearchText;
+    previousWindowId = resultsWindow->ID;
+    previousFrame = frame;
+#endif
     return searchCount;
 }
 
@@ -253,6 +409,54 @@ void Menu::AddSearchWidget(SearchWidget widget) {
 std::unordered_map<uint32_t, disabledInfo>& Menu::GetDisabledMap() {
     return disabledMap;
 }
+
+#if defined(__ANDROID__)
+// Wrap checkbox labels using the actual rendered width, not the desktop
+// section's historical character-count limit. Explicit newlines are kept.
+static std::string AndroidWrapCheckboxLabel(const std::string& label) {
+    const size_t idOffset = label.find("##");
+    const std::string visible = label.substr(0, idOffset);
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float available = ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() -
+                            style.ItemInnerSpacing.x * 2.0f - style.FramePadding.x * 2.0f;
+    if (available <= ImGui::GetFontSize() * 3.0f ||
+        (visible.find('\n') == std::string::npos && ImGui::CalcTextSize(visible.c_str()).x <= available)) {
+        return label;
+    }
+
+    std::string wrapped;
+    std::string line;
+    std::string word;
+    // Wrap at word boundaries; never split a word just to meet a character limit.
+    // The source's intentional newline characters remain hard line breaks.
+    for (size_t i = 0; i <= visible.size(); ++i) {
+        const char ch = i < visible.size() ? visible[i] : '\0';
+        if (ch == ' ' || ch == '\n' || ch == '\0') {
+            if (!word.empty()) {
+                const std::string candidate = line.empty() ? word : line + " " + word;
+                if (!line.empty() && ImGui::CalcTextSize(candidate.c_str()).x > available) {
+                    wrapped += line + "\n";
+                    line = word;
+                } else {
+                    line = candidate;
+                }
+                word.clear();
+            }
+            if (ch == '\n') {
+                wrapped += line + "\n";
+                line.clear();
+            }
+        } else {
+            word += ch;
+        }
+    }
+    wrapped += line;
+    if (idOffset != std::string::npos) {
+        wrapped += label.substr(idOffset); // Keep the original ImGui widget ID.
+    }
+    return wrapped;
+}
+#endif
 
 void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors menuThemeIndex) {
     disabledTempTooltip = "This setting is disabled because: \n\n";
@@ -289,18 +493,31 @@ void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors me
                 }
                 auto options = std::static_pointer_cast<UIWidgets::CheckboxOptions>(widget.options);
                 options->color = menuThemeIndex;
-                if (UIWidgets::Checkbox(UIWidgets::WrappedText(widget.name.c_str(), width).c_str(), pointer,
-                                        *options)) {
+#if defined(__ANDROID__)
+                const std::string label = AndroidWrapCheckboxLabel(widget.name);
+#else
+                const std::string label = UIWidgets::WrappedText(widget.name.c_str(), width);
+#endif
+                if (UIWidgets::Checkbox(label.c_str(), pointer, *options)) {
                     if (widget.callback != nullptr) {
                         widget.callback(widget);
                     }
                 }
             } break;
             case WIDGET_CVAR_CHECKBOX: {
+#if defined(__ANDROID__)
+                if (widget.name == "Popout Menu") {
+                    break;
+                }
+#endif
                 auto options = std::static_pointer_cast<UIWidgets::CheckboxOptions>(widget.options);
                 options->color = menuThemeIndex;
-                if (UIWidgets::CVarCheckbox(UIWidgets::WrappedText(widget.name.c_str(), width).c_str(), widget.cVar,
-                                            *options)) {
+#if defined(__ANDROID__)
+                const std::string label = AndroidWrapCheckboxLabel(widget.name);
+#else
+                const std::string label = UIWidgets::WrappedText(widget.name.c_str(), width);
+#endif
+                if (UIWidgets::CVarCheckbox(label.c_str(), widget.cVar, *options)) {
                     if (widget.callback != nullptr) {
                         widget.callback(widget);
                     }
@@ -485,7 +702,21 @@ void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors me
                 options->color = menuThemeIndex;
                 UIWidgets::WindowButton(widget.name.c_str(), widget.cVar, window, *options);
                 if (!window->IsVisible()) {
+#if defined(__ANDROID__)
+                    // The integrated Mod Menu may use ordinary ImGui::Text(),
+                    // which otherwise clips long descriptions at the right edge.
+                    // Scope wrapping to this window to preserve all other menus.
+                    const bool wrapModMenuText = std::string(widget.windowName) == "Mod Menu";
+                    if (wrapModMenuText) {
+                        ImGui::PushTextWrapPos(0.0f);
+                    }
+#endif
                     window->DrawElement();
+#if defined(__ANDROID__)
+                    if (wrapModMenuText) {
+                        ImGui::PopTextWrapPos();
+                    }
+#endif
                 }
             } break;
             case WIDGET_SEARCH: {
@@ -512,7 +743,9 @@ void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors me
                     return;
                 }
                 DrawSearchResults(menuSearchText);
-                ImGui::EndChild();
+#if !defined(__ANDROID__)
+                ImGui::EndChild(); // Search Results
+#endif
             } break;
             default:
                 break;
@@ -528,6 +761,9 @@ void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors me
 
 void Menu::Draw() {
     if (!IsVisible()) {
+#if defined(__ANDROID__)
+        menuSearch.Clear();
+#endif
         return;
     }
     DrawElement();
@@ -551,7 +787,11 @@ void Menu::DrawElement() {
     windowHeight = ImGui::GetMainViewport()->WorkSize.y;
     windowWidth = ImGui::GetMainViewport()->WorkSize.x;
     auto windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
+#if defined(__ANDROID__)
+    const bool popout = false; // Mobile menu stays fullscreen; no detached menu window.
+#else
     bool popout = CVarGetInteger("gSettings.Menu.Popout", 0) && allowPopout;
+#endif
     if (popout) {
         windowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoDocking;
     }
@@ -602,7 +842,7 @@ void Menu::DrawElement() {
 #if !defined(__ANDROID__)
     ImGui::PushFont(OTRGlobals::Instance->fontStandardLargest);
 #else
-    ImGui::PushFont(OTRGlobals::Instance->fontStandard);
+    ImGui::PushFont(OTRGlobals::Instance->fontStandardLarger);
 #endif
     ImGuiContext& g = *GImGui;
     ImGuiWindow* window = g.CurrentWindow;
@@ -611,7 +851,7 @@ void Menu::DrawElement() {
     windowWidth = window->WorkRect.GetWidth();
 
 #if defined(__ANDROID__)
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, 3.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
 #else
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 8.0f));
 #endif
@@ -629,14 +869,12 @@ void Menu::DrawElement() {
     float reservedHeaderButtonWidth = buttonWidth * 3 + style.ItemSpacing.x * 3;
     float headerSearchWidth = 0.0f;
     float headerWidth = style.ItemSpacing.x;
+#if !defined(__ANDROID__)
     if (headerSearch) {
-#if defined(__ANDROID__)
-        headerSearchWidth = std::clamp(windowWidth * 0.11f, 72.0f, 160.0f);
-#else
         headerSearchWidth = 200.0f;
-#endif
         headerWidth += headerSearchWidth + style.ItemSpacing.x + style.FramePadding.x;
     }
+#endif
     for (auto& label : menuOrder) {
         ImVec2 size = ImGui::CalcTextSize(label.c_str());
         headerSizes.push_back(size);
@@ -661,14 +899,153 @@ void Menu::DrawElement() {
     ImGui::BeginChild("Menu Block", menuSize, ImGuiChildFlags_None,
                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar);
 
-    std::unordered_map<std::string, SidebarEntry>* sidebar;
+    std::unordered_map<std::string, SidebarEntry>* sidebar = &menuEntries.at(headerIndex).sidebars;
     float headerHeight = headerSizes.at(0).y + style.FramePadding.y * 2;
+    float headerRowHeight = headerHeight;
+#if defined(__ANDROID__)
+    // The three action buttons have their own (larger) widget padding. Reserve
+    // their real space instead of estimating it from the compact header style.
+    const float touchScale = ImGui::GetIO().FontGlobalScale;
+    // Keep an extra finger-sized gap between Search and the three critical
+    // actions. Reserve the same gap here and when positioning the action buttons.
+    const float androidHeaderActionGap = std::max(style.ItemSpacing.x, ImGui::GetFontSize() * 0.8f);
+    const float actionsWidth = ImGui::CalcTextSize(ICON_FA_POWER_OFF).x +
+                               ImGui::CalcTextSize(ICON_FA_UNDO).x +
+                               ImGui::CalcTextSize(ICON_FA_TIMES_CIRCLE).x +
+                               6.0f * 10.0f * touchScale + 4.0f * style.ItemSpacing.x +
+                               androidHeaderActionGap;
+    headerRowHeight = std::max(headerRowHeight, ImGui::GetFontSize() + 16.0f * touchScale);
+    headerHeight = headerRowHeight;
+    const float headerAvailableWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x - actionsWidth);
+#else
     ImVec2 buttonSize = ImGui::CalcTextSize(ICON_FA_TIMES_CIRCLE) + style.FramePadding * 2;
     ImGui::SameLine();
     float headerAvailableWidth = std::max(0.0f, menuSize.x - buttonSize.x * 3 - style.ItemSpacing.x * 3);
-    ImVec2 headerSelSize = { headerAvailableWidth, headerHeight };
+#endif
+    ImVec2 headerSelSize = { headerAvailableWidth, headerRowHeight };
     ImGui::BeginChild("Header Selection", headerSelSize, ImGuiChildFlags_None,
                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar);
+    std::string menuSearchText = "";
+#if defined(__ANDROID__)
+    // Android shows a real input field at all times. One touch activates it and
+    // opens the soft keyboard; there is no intermediate search button.
+    // All widths use the current ImGui font/style, so zoom is handled naturally.
+    const float rowWidth = ImGui::GetContentRegionAvail().x;
+    const float gap = style.ItemSpacing.x;
+    float tabsWidth = 0.0f;
+    for (size_t i = 0; i < menuOrder.size(); ++i) {
+        tabsWidth += ImGui::CalcTextSize(menuEntries.at(menuOrder[i]).label.c_str()).x +
+                     style.FramePadding.x * 2.0f;
+        if (i != 0) {
+            tabsWidth += gap;
+        }
+    }
+
+    // Reserve a useful search width first. If the full tab bar won't fit next
+    // to it, replace the tabs with a selector instead of adding a second row.
+    const float desiredSearchWidth = headerSearch
+        ? std::min(std::max(rowWidth * 0.32f, ImGui::GetFontSize() * 9.0f), rowWidth * 0.50f)
+        : 0.0f;
+    const bool showTabs = tabsWidth + (headerSearch ? gap + desiredSearchWidth : 0.0f) <= rowWidth;
+    float searchWidth = desiredSearchWidth;
+
+    if (showTabs) {
+        size_t i = 0;
+        for (const auto& label : menuOrder) {
+            if (i++ != 0) {
+                ImGui::SameLine();
+            }
+            auto& entry = menuEntries.at(label);
+            const bool selected = headerIndex == label;
+            UIWidgets::PushStyleButton(menuThemeIndex);
+            if (!selected) {
+                ImGui::PushStyleColor(ImGuiCol_Button, { 0, 0, 0, 0 });
+            }
+            const bool clicked = ModernMenuHeaderEntry(entry.label);
+            if (!selected) {
+                ImGui::PopStyleColor();
+            }
+            UIWidgets::PopStyleButton();
+            if (clicked && !selected) {
+                headerIndex = label;
+                CVarSetString(headerCvar, label.c_str());
+                CVarSave();
+                menuSearch.Clear();
+            }
+        }
+    } else {
+        // At higher zoom, keep navigation available without sacrificing Search.
+        // Switch to an arrow-only combo if even the active tab title won't fit.
+        const float minimumSearchWidth = headerSearch
+            ? std::min(rowWidth * 0.72f, std::max(ImGui::GetFontSize() * 7.0f, ImGui::GetFrameHeight() * 3.0f))
+            : 0.0f;
+        const float availableComboWidth = std::max(1.0f, rowWidth -
+            (headerSearch ? minimumSearchWidth + gap : 0.0f));
+        const float labelledComboWidth = ImGui::CalcTextSize(menuEntries.at(headerIndex).label.c_str()).x +
+                                        style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
+        const bool compactCombo = availableComboWidth < labelledComboWidth;
+        const float comboWidth = std::min(availableComboWidth,
+            compactCombo ? ImGui::GetFrameHeight() : labelledComboWidth);
+        ImGui::SetNextItemWidth(comboWidth);
+        UIWidgets::PushStyleCombobox(menuThemeIndex);
+        if (ImGui::BeginCombo("##AndroidHeaderTab", compactCombo ? "" : menuEntries.at(headerIndex).label.c_str(),
+                              compactCombo ? ImGuiComboFlags_NoPreview : ImGuiComboFlags_None)) {
+            for (const auto& label : menuOrder) {
+                const bool selected = headerIndex == label;
+                if (ImGui::Selectable(menuEntries.at(label).label.c_str(), selected)) {
+                    headerIndex = label;
+                    CVarSetString(headerCvar, label.c_str());
+                    CVarSave();
+                    menuSearch.Clear();
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        UIWidgets::PopStyleCombobox();
+        searchWidth = headerSearch ? std::max(1.0f, rowWidth - comboWidth - gap) : 0.0f;
+    }
+
+    if (headerSearch) {
+        // Keep Search immediately after the tabs (or compact selector).
+        // Leave the remaining space between Search and the critical actions.
+        ImGui::SameLine(0.0f, gap);
+        const ImVec2 inputPos = ImGui::GetCursorScreenPos();
+        auto color = UIWidgets::ColorValues.at(menuThemeIndex);
+        color.w = 0.6f;
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, color);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+        // Make the input as tall as the neighboring action buttons, not a tiny
+        // text field with a small touch target.
+        const float inputPadY = std::max(style.FramePadding.y,
+            (headerRowHeight - ImGui::GetFontSize()) * 0.5f - 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x, inputPadY));
+        // Defer the Android request by one ImGui frame, so InputText has
+        // already acquired focus before the native keyboard is opened.
+        static int searchKeyboardRequestFrame = -1;
+        menuSearch.Draw("##search", searchWidth);
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+            searchKeyboardRequestFrame = ImGui::GetFrameCount() + 1;
+        }
+        if (searchKeyboardRequestFrame >= 0 && ImGui::GetFrameCount() >= searchKeyboardRequestFrame) {
+            if (ImGui::IsItemActive()) {
+                AndroidRequestSearchKeyboard();
+            }
+            searchKeyboardRequestFrame = -1;
+        }
+        menuSearchText = menuSearch.InputBuf;
+        menuSearchText.erase(std::remove(menuSearchText.begin(), menuSearchText.end(), ' '), menuSearchText.end());
+        if (menuSearch.InputBuf[0] == '\0' && !ImGui::IsItemActive()) {
+            ImGui::GetWindowDrawList()->AddText(
+                ImVec2(inputPos.x + style.FramePadding.x, inputPos.y + inputPadY),
+                ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.4f)), "Search...");
+        }
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor();
+    }
+#else
     uint8_t curIndex = 0;
     for (auto& label : menuOrder) {
         if (curIndex != 0) {
@@ -700,7 +1077,6 @@ void Menu::DrawElement() {
         }
         curIndex++;
     }
-    std::string menuSearchText = "";
     if (headerSearch) {
         ImGui::SameLine();
         if (autoFocus && freshOpen) {
@@ -721,8 +1097,15 @@ void Menu::DrawElement() {
         ImGui::PopStyleVar();
         ImGui::PopStyleColor();
     }
+#endif
+    // A compact selector or search can change the active header this frame.
+    sidebar = &menuEntries.at(headerIndex).sidebars;
     ImGui::EndChild();
+#if defined(__ANDROID__)
+    ImGui::SameLine(0.0f, style.ItemSpacing.x + androidHeaderActionGap);
+#else
     ImGui::SameLine(menuSize.x - (buttonSize.x * 3) - style.ItemSpacing.x * 3);
+#endif
     UIWidgets::ButtonOptions options = {};
     options.color = UIWidgets::Colors::Red;
     options.size = UIWidgets::Sizes::Inline;
@@ -764,6 +1147,9 @@ void Menu::DrawElement() {
     options3.size = UIWidgets::Sizes::Inline;
     options3.tooltip = "Close Menu (Esc)";
     if (UIWidgets::Button(ICON_FA_TIMES_CIRCLE, options3)) {
+#if defined(__ANDROID__)
+        menuSearch.Clear();
+#endif
         ToggleVisibility();
 
         // Update gamepad navigation after close based on if other menus are still visible
@@ -834,7 +1220,7 @@ void Menu::DrawElement() {
     ImGui::EndChild();
 
 #if defined(__ANDROID__)
-    ImGui::PushFont(OTRGlobals::Instance->fontMono);
+    ImGui::PushFont(OTRGlobals::Instance->fontMonoLarger);
 #else
     ImGui::PushFont(OTRGlobals::Instance->fontMonoLarger);
 #endif
@@ -881,7 +1267,9 @@ void Menu::DrawElement() {
             menuSearch.Clear();
         }
 
-        ImGui::EndChild();
+#if !defined(__ANDROID__)
+        ImGui::EndChild(); // Search Results
+#endif
     } else {
         std::string menuLabel = menuEntries.at(headerIndex).label;
         if (MenuInit::GetUpdateFuncs().contains(menuLabel)) {
@@ -927,6 +1315,9 @@ void Menu::DrawElement() {
     if (freshOpen) {
         freshOpen = false;
     }
+#if defined(__ANDROID__)
+    AndroidMenuScrollWindowTree(window);
+#endif
     ImGui::End();
 }
 } // namespace Ship

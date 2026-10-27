@@ -342,19 +342,28 @@ static ImFont* GetItemCountFont(float fontSize) {
     return OTRGlobals::Instance->fontMono;
 }
 
-void DrawItemCounts(TrackerItemType itemType, u32 itemId, ImVec2 cellMin, ImVec2 cellSize, float scale) {
+void DrawItemCounts(TrackerItemType itemType, u32 itemId, ImVec2 cellMin, ImVec2 cellSize, float scale,
+                    bool countBesideIcon) {
     std::string itemCount = GetItemCounts(itemType, itemId);
 
     if (itemCount.empty()) {
         return;
     }
 
-    float fontSize = std::max(cellSize.x * 0.44f, 12.0f) * ImGui::GetIO().FontGlobalScale;
+    // On Android, settings previews have a separate count area beside each icon.
+    // Do not derive font size from that wider cell, or the count grows with its container.
+    const float fontBaseWidth = countBesideIcon ? ITEM_TEXTURE_SIZE * scale : cellSize.x;
+    float fontSize = std::max(fontBaseWidth * 0.44f, 12.0f) * ImGui::GetIO().FontGlobalScale;
     ImFont* font = GetItemCountFont(fontSize);
     ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, itemCount.c_str());
 
     float pad = 2.0f * scale;
     ImVec2 textPos(cellMin.x + cellSize.x - textSize.x - pad, cellMin.y + cellSize.y - textSize.y - pad);
+    if (countBesideIcon) {
+        const float safePad = std::max(pad, fontSize / 12.0f + 1.0f);
+        textPos = ImVec2(cellMin.x + ITEM_TEXTURE_SIZE * scale + ImGui::GetStyle().ItemSpacing.x + safePad,
+                         cellMin.y + (cellSize.y - textSize.y) * 0.5f);
+    }
 
     static const ImVec2 outlineDirections[] = { { -1, -1 }, { 0, -1 }, { 1, -1 }, { -1, 0 },
                                                 { 1, 0 },   { -1, 1 }, { 0, 1 },  { 1, 1 } };
@@ -368,7 +377,26 @@ void DrawItemCounts(TrackerItemType itemType, u32 itemId, ImVec2 cellMin, ImVec2
 }
 
 bool DrawItemTrackerSlot(TrackerItemType itemType, u32 itemId, float scale, bool clickable) {
-    ImVec2 cellSize(ITEM_TEXTURE_SIZE * scale, ITEM_TEXTURE_SIZE * scale);
+    const ImVec2 iconSize(ITEM_TEXTURE_SIZE * scale, ITEM_TEXTURE_SIZE * scale);
+    ImVec2 cellSize = iconSize;
+    bool countBesideIcon = false;
+
+#if defined(__ANDROID__)
+    // Only the clickable settings previews need extra room. The in-game tracker
+    // (clickable == false) keeps its original icon/overlay presentation.
+    if (clickable && CVarGetInteger("gSettings.ItemTracker.ItemCounts", 1)) {
+        const std::string itemCount = GetItemCounts(itemType, itemId);
+        if (!itemCount.empty()) {
+            const float fontSize = std::max(iconSize.x * 0.44f, 12.0f) * ImGui::GetIO().FontGlobalScale;
+            const ImVec2 textSize = GetItemCountFont(fontSize)->CalcTextSizeA(
+                fontSize, FLT_MAX, 0.0f, itemCount.c_str());
+            const float safePad = std::max(2.0f * scale, fontSize / 12.0f + 1.0f);
+            cellSize.x += ImGui::GetStyle().ItemSpacing.x + textSize.x + 2.0f * safePad;
+            cellSize.y = std::max(cellSize.y, textSize.y + 2.0f * safePad);
+            countBesideIcon = true;
+        }
+    }
+#endif
 
     TrackerImageObject imageObject = GetImageObject(itemType, itemId);
 
@@ -403,16 +431,16 @@ bool DrawItemTrackerSlot(TrackerItemType itemType, u32 itemId, float scale, bool
 
     float aspect = imageObject.textureDimensions.x / imageObject.textureDimensions.y;
 
-    // fit to height
-    ImVec2 drawSize(cellSize.y * aspect, cellSize.y);
+    // Fit the texture inside the icon area, not the wider Android count area.
+    ImVec2 drawSize(iconSize.y * aspect, iconSize.y);
 
     // clamp if too wide
-    if (drawSize.x > cellSize.x) {
-        drawSize.x = cellSize.x;
-        drawSize.y = cellSize.x / aspect;
+    if (drawSize.x > iconSize.x) {
+        drawSize.x = iconSize.x;
+        drawSize.y = iconSize.x / aspect;
     }
 
-    ImVec2 offset((cellSize.x - drawSize.x) * 0.5f, (cellSize.y - drawSize.y) * 0.5f);
+    ImVec2 offset((iconSize.x - drawSize.x) * 0.5f, (cellSize.y - drawSize.y) * 0.5f);
 
     // Draw a glow behind skulltula tokens
     if (itemType == TRACKER_ITEM_RANDO && (itemId == RI_GS_TOKEN_SWAMP || itemId == RI_GS_TOKEN_OCEAN)) {
@@ -453,7 +481,7 @@ bool DrawItemTrackerSlot(TrackerItemType itemType, u32 itemId, float scale, bool
     }
 
     if (CVarGetInteger("gSettings.ItemTracker.ItemCounts", 1)) {
-        DrawItemCounts(itemType, itemId, p0, cellSize, scale);
+        DrawItemCounts(itemType, itemId, p0, cellSize, scale, countBesideIcon);
     }
 
     return clicked;

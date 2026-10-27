@@ -1,33 +1,17 @@
 name: Android Release APK
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       install_target:
-        description: Package identity to build
-        required: true
+        description: Android package identity (test or production)
+        type: string
+        required: false
         default: test
-        type: choice
-        options:
-          - test
-          - production
-  push:
-    branches:
-      - android
-    paths:
-      - "Android/**"
-      - "CMake/**"
-      - "CMakeLists.txt"
-      - "OTRExporter/**"
-      - "ZAPDTR/**"
-      - "libultraship"
-      - "libultraship/**"
-      - "mm/**"
-      - ".github/workflows/android-release.yml"
-      - ".github/workflows/apt-deps.txt"
 
 jobs:
   build-android:
+    name: APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -67,29 +51,15 @@ jobs:
           make
           sudo make install
 
-      - name: Generate bundled support archive
-        run: |
-          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
-          cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE:STRING=Release
-          cmake --build build-cmake --config Release --target Generate2ShipOtr -j3
+      # Reuse the same 2ship.o2r generated for desktop builds in main.yml.
+      - name: Download bundled support archive
+        uses: actions/download-artifact@v8
+        with:
+          name: 2ship.o2r
+          path: Android/app/src/main/assets
 
-      - name: Bundle generated support archive
-        run: |
-          support_archive=""
-          for candidate in 2ship.o2r build-cmake/mm/2ship.o2r build-cmake/2ship.o2r; do
-            if [ -f "$candidate" ]; then
-              support_archive="$candidate"
-              break
-            fi
-          done
-          if [ -z "$support_archive" ]; then
-            echo "Generated 2ship.o2r support archive was not found."
-            find . -name '2ship.o2r' -print
-            exit 1
-          fi
-          mkdir -p Android/app/src/main/assets
-          cp "$support_archive" Android/app/src/main/assets/2ship.o2r
-          ls -lh Android/app/src/main/assets/2ship.o2r
+      - name: Verify bundled support archive
+        run: test -s Android/app/src/main/assets/2ship.o2r
 
       - uses: actions/setup-java@v5
         with:
@@ -98,7 +68,7 @@ jobs:
 
       - name: Install Android build tools
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.0.10792818" "cmake;3.30.3"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.0.10792818" "cmake;3.30.3"
 
       - name: Install Android vcpkg dependencies
         env:
@@ -113,7 +83,21 @@ jobs:
           "$VCPKG_ROOT/bootstrap-vcpkg.sh"
           "$VCPKG_ROOT/vcpkg" install --triplet arm64-android zlib libpng libogg libvorbis opus opusfile
 
+      - name: Validate package identity and production ref
+        env:
+          INSTALL_TARGET: ${{ inputs.install_target }}
+        run: |
+          if [[ "$INSTALL_TARGET" != 'test' && "$INSTALL_TARGET" != 'production' ]]; then
+            echo "::error::install_target must be test or production"
+            exit 1
+          fi
+          if [[ "$INSTALL_TARGET" == 'production' && "$GITHUB_REF" != refs/tags/pal11-v* ]]; then
+            echo "::error::Production Android APK requires a pal11-v* tag"
+            exit 1
+          fi
+
       - name: Prepare release signing key
+        if: inputs.install_target == 'production'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -121,8 +105,8 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "ANDROID_KEYSTORE_BASE64 is not configured; APK will use debug signing."
-            exit 0
+            echo "::error::Production APK requires ANDROID_KEYSTORE_BASE64."
+            exit 1
           fi
           if [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
             echo "Release signing is partially configured. Set ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD."
@@ -134,20 +118,20 @@ jobs:
         working-directory: Android
         env:
           VCPKG_ROOT: ${{ github.workspace }}/build/vcpkg
-          ANDROID_KEYSTORE_PATH: release-keystore.jks
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_PATH: ${{ inputs.install_target == 'production' && 'release-keystore.jks' || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ inputs.install_target == 'production' && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
+          ANDROID_KEY_ALIAS: ${{ inputs.install_target == 'production' && secrets.ANDROID_KEY_ALIAS || '' }}
+          ANDROID_KEY_PASSWORD: ${{ inputs.install_target == 'production' && secrets.ANDROID_KEY_PASSWORD || '' }}
         run: |
           app_id_args=()
-          if [[ '${{ github.event_name }}' == 'workflow_dispatch' && '${{ inputs.install_target }}' == 'test' ]]; then
+          if [[ '${{ inputs.install_target }}' == 'test' ]]; then
             app_id_args+=('-PtwoShipApplicationId=com.twoshipfork.mm.touchcontroltest')
           fi
           ./gradlew :app:assembleRelease "${app_id_args[@]}"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: 2Ship-Android-${{ github.event_name == 'workflow_dispatch' && inputs.install_target || 'production' }}
+          name: 2Ship-Android-${{ inputs.install_target }}
           path: Android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
