@@ -91,8 +91,8 @@ jobs:
             echo "::error::install_target must be test or production"
             exit 1
           fi
-          if [[ "$INSTALL_TARGET" == 'production' && "$GITHUB_REF" != refs/tags/pal11-v* ]]; then
-            echo "::error::Production Android APK requires a pal11-v* tag"
+          if [[ "$INSTALL_TARGET" == 'production' && "$GITHUB_REF" != refs/tags/*-pal11-v* ]]; then
+            echo "::error::Production Android APK requires a *-pal11-v* tag"
             exit 1
           fi
 

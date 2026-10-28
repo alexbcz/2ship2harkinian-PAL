@@ -82,7 +82,7 @@ jobs:
 
   build-macos:
     needs: generate-2ship-otr
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
     - name: Git Checkout
       uses: actions/checkout@v6
@@ -303,5 +303,5 @@ jobs:
     uses: ./.github/workflows/android-release.yml
     with:
       # Only PAL release tags generate a production APK. Others get test APKs.
-      install_target: ${{ startsWith(github.ref, 'refs/tags/pal11-v') && 'production' || 'test' }}
+      install_target: ${{ startsWith(github.ref, 'refs/tags/') && contains(github.ref, '-pal11-v') && 'production' || 'test' }}
     secrets: inherit

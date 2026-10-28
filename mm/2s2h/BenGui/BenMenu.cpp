@@ -555,6 +555,12 @@ void BenMenu::AddSettings() {
     path.column = SECTION_COLUMN_2;
     AddWidget(path, "about", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
         ImGui::BeginChild("about");
+        // A release build uses its exact Git tag; development builds show the branch and commit.
+        if (gGitCommitTag[0] != '\0') {
+            ImGui::Text("Version: %s", (char*)gGitCommitTag);
+        } else {
+            ImGui::Text("Build: %s | %s", (char*)gGitBranch, (char*)gGitCommitHash);
+        }
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.5f, 1.0f));
         ImGui::SeparatorText("Thank You");
         ImGui::PopStyleColor();
